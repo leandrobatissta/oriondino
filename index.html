@@ -79,7 +79,12 @@
   const world = { gravity:()=>28*UNIT(), jump:()=>20*UNIT(), baseSpeed:()=>11*UNIT(), speed:0, obstacles:[], dist:0 };
   const player = { y:0, vy:0, onGround:true, t:0, f:0, scale:1.2 };
 
-  function startGame(){
+  
+    function startGame(){
+      try { bgMusic.currentTime = 0; bgMusic.play(); } catch (e) {}
+      bgMusic.playing = true;
+      introSound.pause(); introSound.playing = false;
+    
     // limpar tela para evitar resquício do menu
     ctx.save(); ctx.setTransform(1,0,0,1,0,0); ctx.clearRect(0,0,cvs.width,cvs.height); ctx.restore();
     state.mode='play'; hud.style.display='flex';
@@ -87,7 +92,13 @@
     player.y = GY() - 4.2*UNIT(); player.vy=0; player.onGround=true; player.t=0; player.f=0;
   }
 
-  function drawMenu(){
+  
+    function drawMenu(){
+      if (!introSound.playing) {
+        try { introSound.play(); } catch (e) {}
+        introSound.playing = true;
+      }
+    
     const w=cvs.clientWidth,h=cvs.clientHeight;
     // fundo cover
     if(bg.complete){
@@ -111,10 +122,10 @@
 
   function spawn(){ const u=UNIT(); const s=1+Math.floor(Math.random()*3); const w=(0.9+0.5*s)*u, h=(2+0.8*s)*u; const gap=u*(20+Math.random()*16); world.obstacles.push({x:cvs.clientWidth+gap,y:GY()-h,w,h}); }
 
-  function tryJump(){ if(state.mode==='menu'){ startGame(); return; } if(player.onGround){ player.vy=-world.jump(); player.onGround=false; } }
+  function tryJump(){ if(state.mode==='menu'){ startGame(); return; } if(player.onGround){ player.vy=-world.jump(); player.onGround=false; jumpSound.play(); } }
   cvs.addEventListener('pointerdown', tryJump);
   window.addEventListener('keydown', e=>{ if(e.code==='Space'||e.code==='ArrowUp'){ e.preventDefault(); tryJump(); } }, {passive:false});
-  document.getElementById('reset').onclick = ()=>{ state.hi=0; localStorage.setItem('dino_hi','0'); document.getElementById('hi').textContent='0'; };
+  document.getElementById('reset').onclick = ()=>{ state.hi=0; localStorage.setItem('dino_hi','0'); document.getElementById('hi').textContent='0'; document.getElementById('sc').textContent='0'; state.score = 0; };
 
   let last=performance.now();
   function loop(now){
@@ -124,7 +135,14 @@
       requestAnimationFrame(loop); return;
     }
 
+    
     // ====== JOGO ======
+    // Tocar música de fundo se não estiver tocando
+    if (!bgMusic.playing && state.mode === 'play') {
+      try { bgMusic.play(); } catch (e) {}
+      bgMusic.playing = true;
+    }
+    
     const w=cvs.clientWidth,h=cvs.clientHeight;
     ctx.fillStyle='#f3dcc1'; ctx.fillRect(0,0,w,h);
     ctx.fillStyle='rgba(0,0,0,.08)'; ctx.fillRect(0, GY()+UNIT()*0.5, w, 2);
@@ -142,7 +160,22 @@
     // obstáculos
     world.dist -= world.speed*dt; if(world.dist<=0){ world.dist=UNIT()*(26+Math.random()*12); spawn(); }
     ctx.fillStyle='#2e7d32';
-    for(const o of world.obstacles){ o.x -= world.speed*dt; ctx.fillRect(o.x,o.y,o.w,o.h); }
+    
+    for(const o of world.obstacles){
+      o.x -= world.speed*dt;
+      ctx.fillRect(o.x,o.y,o.w,o.h);
+      if (!o.passed && o.x + o.w < PLAYER_X) {
+        o.passed = true;
+        state.score++;
+        if (state.score > state.hi) {
+          state.hi = state.score;
+          localStorage.setItem('dino_hi', state.hi.toString());
+        }
+        document.getElementById('sc').textContent = state.score;
+        document.getElementById('hi').textContent = state.hi;
+      }
+    }
+    
     world.obstacles = world.obstacles.filter(o=>o.x+o.w>-20);
 
     // desenha sprite
@@ -158,7 +191,7 @@
       const hx = destX + sprW*b.ox, hy = destY + sprH*b.oy, hw = sprW*b.ow, hh = sprH*b.oh;
       for(const o of world.obstacles){
         if(hx < o.x+o.w && hx+hw > o.x && hy < o.y+o.h && hy+hh > o.y){
-          state.mode='menu'; hud.style.display='none'; // volta ao menu
+          state.mode='menu'; hud.style.display='none'; bgMusic.pause(); bgMusic.playing = false; introSound.play();
         }
       }
     }
