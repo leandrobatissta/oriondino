@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no"/>
+<title>Orion Dino</title>
+<style>
+  html,body{height:100%;margin:0;background:#000;font-family:system-ui,Segoe UI,Roboto,Helvetica,Arial}
+  .wrap{display:grid;place-items:center;height:100%;gap:12px;padding:12px}
+  .stack{position:relative;width:100%;max-width:900px}
+  #game{width:100%;aspect-ratio:2/3;max-height:92vh;background:#000;border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,.35);display:block;touch-action:manipulation}
+  .hud{display:flex;justify-content:space-between;align-items:center;width:100%;font-size:14px;color:#d1d5db;margin-top:8px}
+  .pill{border:1px solid #ddd;padding:6px 10px;border-radius:999px;cursor:pointer;user-select:none;background:#111;color:#eee}
+</style>
+
+    <audio id="introSound" src="assets/sounds/intro.mp3" preload="auto"></audio>
+    <audio id="bgMusic" src="assets/sounds/bg.mp3" preload="auto" loop></audio>
+    <audio id="jumpSound" src="assets/sounds/jump.mp3" preload="auto"></audio>
+    <audio id="hitSound" src="assets/sounds/hit.mp3" preload="auto"></audio>
+    
+</head>
+<body>
+<div class="wrap">
+  <div class="stack">
+    <canvas id="game"></canvas>
+  </div>
+  <div class="hud" id="hud" style="display:none">
+    <div>Score: <span id="sc">0</span> | HI: <span id="hi">0</span></div>
+    <div class="pill" id="reset">Zerar Recorde</div>
+  </div>
+</div>
+<script>
+(() => {
+  const cvs = document.getElementById('game');
+  const ctx = cvs.getContext('2d');
+  ctx.imageSmoothingEnabled = false;
+
+  function fit(){
+    const dpr=Math.max(1,Math.min(window.devicePixelRatio||1,2));
+    const w=cvs.clientWidth,h=cvs.clientHeight;
+    cvs.width=Math.round(w*dpr); cvs.height=Math.round(h*dpr);
+    ctx.setTransform(dpr,0,0,dpr,0,0);
+  }
+  new ResizeObserver(fit).observe(cvs); fit();
+
+  const bg = new Image(); bg.src = 'assets/menu_bg.jpg';
+  const sheet = new Image(); sheet.src = 'assets/char_sheet_cropped.png';
+  const SPR = { cols:4, rows:1, frames:[0,1,2,1], w:0, h:0, ready:false, bounds:null };
+  sheet.onload = () => {
+    SPR.w=Math.floor(sheet.naturalWidth/4); SPR.h=sheet.naturalHeight; SPR.ready=true; computeBounds();
+  };
+
+  // ==== Bounds por alpha do 1º frame (com margens pequenas) ====
+  function computeBounds(){
+    const off=document.createElement('canvas'); off.width=SPR.w; off.height=SPR.h;
+    const octx=off.getContext('2d',{willReadFrequently:true}); octx.imageSmoothingEnabled=false;
+    octx.drawImage(sheet,0,0,SPR.w,SPR.h,0,0,SPR.w,SPR.h);
+    const d=octx.getImageData(0,0,SPR.w,SPR.h).data;
+    let minX=SPR.w,minY=SPR.h,maxX=0,maxY=0,found=false;
+    for(let y=0;y<SPR.h;y++){ for(let x=0;x<SPR.w;x++){ if(d[(y*SPR.w+x)*4+3]>10){ if(x<minX)minX=x; if(y<minY)minY=y; if(x>maxX)maxX=x; if(y>maxY)maxY=y; found=true; } } }
+    if(!found){ SPR.bounds={ox:.12,oy:.10,ow:.7,oh:.85}; return; }
+    // converter para proporções e aplicar "aperto" na frente e abaixo
+    let ox=minX/SPR.w, oy=minY/SPR.h, ow=(maxX-minX+1)/SPR.w, oh=(maxY-minY+1)/SPR.h;
+    // Encolher um pouco para evitar falso positivo na frente do pé
+    const shrinkX=0.08, shrinkY=0.08; ox+=shrinkX; ow-=shrinkX*1.6; oy+=shrinkY; oh-=shrinkY*1.2;
+    SPR.bounds={ox,oy,ow,oh};
+  }
+
+  // ==== Estados ====
+  const state = { mode:'menu', score:0, hi:Number(localStorage.getItem('dino_hi')||0) };
+  document.getElementById('hi').textContent = state.hi ?? 0;
+  const hud = document.getElementById('hud');
+
+  const UNIT = () => Math.max(6, Math.round(cvs.clientHeight/30));
+  const GY = () => Math.round(cvs.clientHeight*0.80);
+  let PLAYER_X = Math.round(cvs.clientWidth*0.16);
+  new ResizeObserver(()=>{ PLAYER_X = Math.round(cvs.clientWidth*0.16); }).observe(cvs);
+
+  const world = { gravity:()=>28*UNIT(), jump:()=>20*UNIT(), baseSpeed:()=>11*UNIT(), speed:0, obstacles:[], dist:0 };
+  const player = { y:0, vy:0, onGround:true, t:0, f:0, scale:1.2 };
+
+  function startGame(){
+    // limpar tela para evitar resquício do menu
+    ctx.save(); ctx.setTransform(1,0,0,1,0,0); ctx.clearRect(0,0,cvs.width,cvs.height); ctx.restore();
+    state.mode='play'; hud.style.display='flex';
+    world.speed=world.baseSpeed(); world.obstacles.length=0; world.dist=0;
+    player.y = GY() - 4.2*UNIT(); player.vy=0; player.onGround=true; player.t=0; player.f=0;
+  }
+
+  function drawMenu(){
+    const w=cvs.clientWidth,h=cvs.clientHeight;
+    // fundo cover
+    if(bg.complete){
+      const r=Math.max(w/bg.naturalWidth,h/bg.naturalHeight);
+      const dw=bg.naturalWidth*r, dh=bg.naturalHeight*r;
+      const dx=(w-dw)/2, dy=(h-dh)/2;
+      ctx.drawImage(bg, dx, dy, dw, dh);
+    }
+    // (removido) não desenhar sprite no menu
+    if(SPR.ready){
+    }
+    // botão JOGAR
+    const btnW = Math.min(320, Math.round(w*0.55));
+    const btnH = Math.round(btnW*0.24);
+    const bx = Math.round((w-btnW)/2), by = Math.round(h*0.80);
+    ctx.fillStyle = '#e8d3ac'; ctx.fillRect(bx,by,btnW,btnH);
+    ctx.fillStyle = '#6b4b26'; ctx.fillRect(bx,by+btnH-6,btnW,6);
+    ctx.fillStyle = '#5a4634'; ctx.font = `bold ${Math.round(btnH*0.45)}px system-ui`;
+    ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillText('JOGAR', bx+btnW/2, by+btnH*0.55);
+  }
+
+  function spawn(){ const u=UNIT(); const s=1+Math.floor(Math.random()*3); const w=(0.9+0.5*s)*u, h=(2+0.8*s)*u; const gap=u*(20+Math.random()*16); world.obstacles.push({x:cvs.clientWidth+gap,y:GY()-h,w,h}); }
+
+  function tryJump(){ if(state.mode==='menu'){ startGame(); return; } if(player.onGround){ player.vy=-world.jump(); player.onGround=false; } }
+  cvs.addEventListener('pointerdown', tryJump);
+  window.addEventListener('keydown', e=>{ if(e.code==='Space'||e.code==='ArrowUp'){ e.preventDefault(); tryJump(); } }, {passive:false});
+  document.getElementById('reset').onclick = ()=>{ state.hi=0; localStorage.setItem('dino_hi','0'); document.getElementById('hi').textContent='0'; };
+
+  let last=performance.now();
+  function loop(now){
+    const dt=Math.min(0.032,(now-last)/1000); last=now;
+    if(state.mode==='menu'){
+      drawMenu();
+      requestAnimationFrame(loop); return;
+    }
+
+    // ====== JOGO ======
+    const w=cvs.clientWidth,h=cvs.clientHeight;
+    ctx.fillStyle='#f3dcc1'; ctx.fillRect(0,0,w,h);
+    ctx.fillStyle='rgba(0,0,0,.08)'; ctx.fillRect(0, GY()+UNIT()*0.5, w, 2);
+
+    // animação
+    if(SPR.ready){ player.t += dt; const idx=Math.floor(player.t*12)%SPR.frames.length; player.f = SPR.frames[idx]; }
+
+    // física
+    player.vy += world.gravity()*dt; player.y += player.vy*dt;
+    const gy = GY() - 4.2*UNIT(); if(player.y>=gy){ player.y=gy; player.vy=0; player.onGround=true; } else player.onGround=false;
+
+    // velocidade linear
+    world.speed += 0.12*UNIT()*dt;
+
+    // obstáculos
+    world.dist -= world.speed*dt; if(world.dist<=0){ world.dist=UNIT()*(26+Math.random()*12); spawn(); }
+    ctx.fillStyle='#2e7d32';
+    for(const o of world.obstacles){ o.x -= world.speed*dt; ctx.fillRect(o.x,o.y,o.w,o.h); }
+    world.obstacles = world.obstacles.filter(o=>o.x+o.w>-20);
+
+    // desenha sprite
+    if(SPR.ready){
+      const u=UNIT(); const pw=4.2*u; const sprW=pw*player.scale; const sprH=sprW*(SPR.h/SPR.w);
+      const baseY = player.y + pw;
+      const destX = PLAYER_X; const destY = baseY - sprH;
+      const sX = player.f*SPR.w;
+      ctx.drawImage(sheet, sX, 0, SPR.w, SPR.h, destX, destY, sprW, sprH);
+
+      // colisão (hitbox por alpha do 1º frame com margens)
+      const b = SPR.bounds || {ox:.12,oy:.10,ow:.7,oh:.85};
+      const hx = destX + sprW*b.ox, hy = destY + sprH*b.oy, hw = sprW*b.ow, hh = sprH*b.oh;
+      for(const o of world.obstacles){
+        if(hx < o.x+o.w && hx+hw > o.x && hy < o.y+o.h && hy+hh > o.y){
+          state.mode='menu'; hud.style.display='none'; // volta ao menu
+        }
+      }
+    }
+
+    requestAnimationFrame(loop);
+  }
+  requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>
