@@ -124,7 +124,7 @@
     function spawn(){
       const u=UNIT();
       const s=1+Math.floor(Math.random()*3);
-      const w=(0.9+0.5*s)*u*2.5, h=(2+0.8*s)*u*1.5;
+      const w=(0.9+0.5*s)*u*2, h=(2+0.8*s)*u*1;
       const gap=u*(20+Math.random()*16);
       const cactusIndex = Math.floor(Math.random()*14); // de 0 a 13
       world.obstacles.push({x:cvs.clientWidth+gap,y:GY()-h,w,h,cactusIndex});
