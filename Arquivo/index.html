@@ -120,16 +120,7 @@
     ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillText('JOGAR', bx+btnW/2, by+btnH*0.55);
   }
 
-  
-    function spawn(){
-      const u=UNIT();
-      const s=1+Math.floor(Math.random()*3);
-      const w=(0.9+0.5*s)*u*2.5, h=(2+0.8*s)*u*1.5;
-      const gap=u*(20+Math.random()*16);
-      const cactusIndex = Math.floor(Math.random()*14); // de 0 a 13
-      world.obstacles.push({x:cvs.clientWidth+gap,y:GY()-h,w,h,cactusIndex});
-    }
-    
+  function spawn(){ const u=UNIT(); const s=1+Math.floor(Math.random()*3); const w=(0.9+0.5*s)*u, h=(2+0.8*s)*u; const gap=u*(20+Math.random()*16); world.obstacles.push({x:cvs.clientWidth+gap,y:GY()-h,w,h}); }
 
   function tryJump(){ if(state.mode==='menu'){ startGame(); return; } if(player.onGround){ player.vy=-world.jump(); player.onGround=false; jumpSound.play(); } }
   cvs.addEventListener('pointerdown', tryJump);
@@ -168,30 +159,11 @@
 
     // obstáculos
     world.dist -= world.speed*dt; if(world.dist<=0){ world.dist=UNIT()*(26+Math.random()*12); spawn(); }
-    
-    // === Carregar cactos ===
-    const cactusImages = [];
-    for (let i = 1; i <= 14; i++) {
-      const img = new Image();
-      img.src = `assets/${i}.png`;
-      cactusImages.push(img);
-    }
-    
+    ctx.fillStyle='#2e7d32';
     
     for(const o of world.obstacles){
       o.x -= world.speed*dt;
-      
-    const cactus = cactusImages[o.cactusIndex || 0];
-    if (cactus.complete) {
-      const ratio = cactus.naturalHeight / cactus.naturalWidth;
-      const drawW = o.w;
-      const drawH = drawW * ratio;
-      ctx.drawImage(cactus, o.x, o.y - (drawH - o.h), drawW, drawH);
-    } else {
-      ctx.fillStyle='#2e7d32';
       ctx.fillRect(o.x,o.y,o.w,o.h);
-    }
-    
       if (!o.passed && o.x + o.w < PLAYER_X) {
         o.passed = true;
         state.score++;
@@ -215,12 +187,10 @@
       ctx.drawImage(sheet, sX, 0, SPR.w, SPR.h, destX, destY, sprW, sprH);
 
       // colisão (hitbox por alpha do 1º frame com margens)
-      const b = SPR.bounds || {ox:.12,oy:.10,ow:.7,oh:.65};
+      const b = SPR.bounds || {ox:.12,oy:.10,ow:.7,oh:.85};
       const hx = destX + sprW*b.ox, hy = destY + sprH*b.oy, hw = sprW*b.ow, hh = sprH*b.oh;
       for(const o of world.obstacles){
-        const ob = o.bounds || {ox:0.1,oy:0.1,ow:0.6,oh:0.6};
-const ox = o.x + o.w * ob.ox, oy = o.y + o.h * ob.oy, ow = o.w * ob.ow, oh = o.h * ob.oh;
-if(hx < ox+ow && hx+hw > ox && hy < oy+oh && hy+hh > oy){
+        if(hx < o.x+o.w && hx+hw > o.x && hy < o.y+o.h && hy+hh > o.y){
           state.mode='menu'; hud.style.display='none'; bgMusic.pause(); bgMusic.playing = false; introSound.play();
         }
       }
@@ -228,27 +198,7 @@ if(hx < ox+ow && hx+hw > ox && hy < oy+oh && hy+hh > oy){
 
     requestAnimationFrame(loop);
   }
-  
-
-// === Cálculo de bounds por alpha para obstáculos (como feito no sprite) ===
-function computeObstacleBounds(img){
-  const w = img.naturalWidth, h = img.naturalHeight;
-  const off = document.createElement('canvas'); off.width=w; off.height=h;
-  const octx = off.getContext('2d', { willReadFrequently:true }); octx.imageSmoothingEnabled=false;
-  octx.clearRect(0,0,w,h);
-  octx.drawImage(img,0,0,w,h);
-  const d = octx.getImageData(0,0,w,h).data;
-  let minX=w,minY=h,maxX=0,maxY=0,found=false;
-  for(let y=0;y<h;y++){ for(let x=0;x<w;x++){ if(d[(y*w+x)*4+3]>10){ if(x<minX)minX=x; if(y<minY)minY=y; if(x>maxX)maxX=x; if(y>maxY)maxY=y; found=true; } } }
-  if(!found) return {ox:0.1, oy:0.1, ow:0.8, oh:0.8};
-  const shrinkX=0.05, shrinkY=0.05;
-  let ox=minX/w, oy=minY/h, ow=(maxX-minX+1)/w, oh=(maxY-minY+1)/h;
-  ox+=shrinkX; ow-=shrinkX*2; oy+=shrinkY; oh-=shrinkY*2;
-  return {ox,oy,ow,oh};
-}
-
-
-requestAnimationFrame(loop);
+  requestAnimationFrame(loop);
 })();
 </script>
 </body>
