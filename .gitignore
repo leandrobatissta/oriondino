@@ -1,0 +1,22 @@
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Logs
+*.log
+
+# Test / scratch HTML files (keep only the main game index.html)
+*-test.html
+*test*.html
+*debug*.html
+*sprite-*.html
+sprite_generator.html
+corte-teste.html
+simple.html
+
+# Optional: ignore temporary exports
+*.zip
