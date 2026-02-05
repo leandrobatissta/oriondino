@@ -829,7 +829,7 @@
     state.score = 0;
     document.getElementById('sc').textContent = '0';
     state.phase = 0;
-    state.phaseOverlay = 1.2;
+    state.phaseOverlay = 4.2;
     state.nextPhaseAt = 10;
     state.upgradeAt = 10;
     state.upgradeOptions = null;
@@ -901,7 +901,29 @@
       titleSize = Math.round(titleSize * 0.92);
       ctx.font = `bold ${titleSize}px system-ui`;
     }
-    ctx.fillText(title, w/2, h*0.10);
+    let titleTwoLines = false;
+    let titleBottomY = h*0.10;
+    if(ctx.measureText(title).width <= w*0.92){
+      const ty = h*0.10;
+      ctx.fillText(title, w/2, ty);
+      titleBottomY = ty + titleSize*0.75;
+    } else {
+      titleTwoLines = true;
+      // fallback mobile: duas linhas para não vazar
+      const t1 = 'ORION & YASMINN';
+      const t2 = 'CORRIDA DA AVENTURA';
+      let s1 = Math.round(h*0.055);
+      ctx.font = `bold ${s1}px system-ui`;
+      while(s1 > 16 && (ctx.measureText(t1).width > w*0.92 || ctx.measureText(t2).width > w*0.92)){
+        s1 = Math.round(s1 * 0.92);
+        ctx.font = `bold ${s1}px system-ui`;
+      }
+      const lh = Math.round(s1*1.05);
+      const tTop = h*0.085;
+      ctx.fillText(t1, w/2, tTop);
+      ctx.fillText(t2, w/2, tTop + lh);
+      titleBottomY = tTop + lh + s1*0.75;
+    }
     ctx.fillStyle='rgba(255,255,255,0.88)';
     const subtitle = 'Escolha sua fantasia e corra!';
     let subSize = Math.round(h*0.032);
@@ -910,11 +932,12 @@
       subSize = Math.round(subSize * 0.92);
       ctx.font = `${subSize}px system-ui`;
     }
+    const subtitleY = Math.round(Math.min(h*0.24, titleBottomY + Math.max(10, Math.round(h*0.02))));
     if(ctx.measureText(subtitle).width <= w*0.90){
-      ctx.fillText(subtitle, w/2, h*0.145);
+      ctx.fillText(subtitle, w/2, subtitleY);
     } else {
       const subFont = `${subSize}px system-ui`;
-      wrapTextCentered(subtitle, w/2, h*0.145, w*0.90, Math.round(subSize*1.15), subFont);
+      wrapTextCentered(subtitle, w/2, subtitleY, w*0.90, Math.round(subSize*1.15), subFont);
     }
 
     // botão COMEÇAR (usado também para limitar o grid no mobile)
@@ -925,7 +948,7 @@
     const rows = Math.ceil(cards.length / cols);
     const gapX = Math.round(w*0.03);
     const gapY = Math.round(h*0.028);
-    const startY = Math.round(h*0.20);
+    const startY = Math.max(Math.round(h*0.20), subtitleY + Math.round(h*0.055));
     const availW = w - gapX*(cols+1);
     const bottomPad = Math.max(10, Math.round(h*0.02));
     const bottomLimit = Math.max(startY + 60, br.y - bottomPad);
@@ -1041,12 +1064,38 @@
   function pickCharacterAt(x,y){
     const w=cvs.clientWidth,h=cvs.clientHeight;
     const br = getStartButtonRect();
+
+    // Reproduz o cálculo do subtitleY/startY para o hit-test casar com o layout
+    ctx.textAlign='center'; ctx.textBaseline='middle';
+    const title = 'ORION & YASMINN — CORRIDA DA AVENTURA';
+    let titleSize = Math.round(h*0.055);
+    ctx.font = `bold ${titleSize}px system-ui`;
+    while(titleSize > 18 && ctx.measureText(title).width > w*0.92){
+      titleSize = Math.round(titleSize * 0.92);
+      ctx.font = `bold ${titleSize}px system-ui`;
+    }
+    let titleBottomY = h*0.10 + titleSize*0.75;
+    if(ctx.measureText(title).width > w*0.92){
+      const t1 = 'ORION & YASMINN';
+      const t2 = 'CORRIDA DA AVENTURA';
+      let s1 = Math.round(h*0.055);
+      ctx.font = `bold ${s1}px system-ui`;
+      while(s1 > 16 && (ctx.measureText(t1).width > w*0.92 || ctx.measureText(t2).width > w*0.92)){
+        s1 = Math.round(s1 * 0.92);
+        ctx.font = `bold ${s1}px system-ui`;
+      }
+      const lh = Math.round(s1*1.05);
+      const tTop = h*0.085;
+      titleBottomY = tTop + lh + s1*0.75;
+    }
+    const subtitleY = Math.round(Math.min(h*0.24, titleBottomY + Math.max(10, Math.round(h*0.02))));
+
     const cards = Object.entries(CHARACTERS);
     const cols = w >= 860 ? 4 : (w >= 520 ? 3 : 2);
     const rows = Math.ceil(cards.length / cols);
     const gapX = Math.round(w*0.03);
     const gapY = Math.round(h*0.028);
-    const startY = Math.round(h*0.20);
+    const startY = Math.max(Math.round(h*0.20), subtitleY + Math.round(h*0.055));
     const availW = w - gapX*(cols+1);
     const bottomPad = Math.max(10, Math.round(h*0.02));
     const bottomLimit = Math.max(startY + 60, br.y - bottomPad);
@@ -1371,9 +1420,11 @@
 
     // HUD dentro do canvas (score/hi/record + vidas)
     {
+      ctx.save();
       const bestName = bestCharacterId && CHARACTERS[bestCharacterId] ? CHARACTERS[bestCharacterId].name : '';
-      const rec = bestName ? `${bestCharacterScore} (${bestName})` : `${bestCharacterScore || 0}`;
-      let text = `SCORE ${state.score}   •   RECORD ${rec}`;
+      const recFull = bestName ? `${bestCharacterScore} (${bestName})` : `${bestCharacterScore || 0}`;
+      const recShort = `${bestCharacterScore || 0}`;
+      let text = `SCORE ${state.score}   •   RECORD ${recFull}`;
       const boxH = Math.max(34, Math.round(h*0.055));
       const heartSize = Math.round(boxH*0.55);
       const heartSpacing = Math.round(heartSize*1.1);
@@ -1388,15 +1439,15 @@
         return ctx.measureText(text).width;
       };
       let tw = measure();
-      while(fontSize > 11 && (tw + padX*3 + heartsW) > maxBoxW){
+      while(fontSize > 9 && (tw + padX*3 + heartsW) > maxBoxW){
         fontSize = Math.round(fontSize*0.92);
         tw = measure();
       }
       if((tw + padX*3 + heartsW) > maxBoxW){
-        text = `S ${state.score} • R ${bestCharacterScore || 0}`;
-        fontSize = Math.max(11, Math.round(boxH*0.38));
+        text = `SCORE ${state.score}   •   RECORD ${recShort}`;
+        fontSize = Math.max(9, Math.round(boxH*0.36));
         tw = measure();
-        while(fontSize > 10 && (tw + padX*3 + heartsW) > maxBoxW){
+        while(fontSize > 8 && (tw + padX*3 + heartsW) > maxBoxW){
           fontSize = Math.round(fontSize*0.92);
           tw = measure();
         }
@@ -1409,7 +1460,7 @@
       ctx.fillStyle = 'rgba(0,0,0,0.35)';
       ctx.fillRect(x, y + 3, boxW, boxH);
       // pill
-      ctx.fillStyle = 'rgba(15, 23, 42, 0.55)';
+      ctx.fillStyle = 'rgba(15, 23, 42, 0.82)';
       ctx.fillRect(x, y, boxW, boxH);
       ctx.strokeStyle = 'rgba(255,255,255,0.18)';
       ctx.lineWidth = 2;
@@ -1590,7 +1641,7 @@
         // fases
         if(state.score >= state.nextPhaseAt) {
           state.phase = Math.min(phases.length-1, state.phase + 1);
-          state.phaseOverlay = 1.4;
+          state.phaseOverlay = 4.4;
           state.nextPhaseAt += 10;
           try { phaseSound.currentTime = 0; } catch(_) {}
           safePlay(phaseSound);
