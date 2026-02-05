@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+<title>Bônus Surf — Teste Mínimo</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;}
+body{background:#0ea5e9;overflow:hidden;font-family:system-ui;}
+canvas{display:block;image-rendering:pixelated;image-rendering:-moz-crisp-edges;image-rendering:crisp-edges;}
+</style>
+</head>
+<body>
+<canvas id="cvs"></canvas>
+<script>
+const cvs = document.getElementById('cvs');
+const ctx = cvs.getContext('2d');
+ctx.imageSmoothingEnabled = false;
+
+function resize(){
+  cvs.width = window.innerWidth;
+  cvs.height = window.innerHeight;
+}
+window.addEventListener('resize', resize);
+resize();
+
+let x = 100;
+let y = 100;
+let vx = 2;
+let vy = 1;
+
+function loop(){
+  ctx.fillStyle = '#38bdf8';
+  ctx.fillRect(0, 0, cvs.width, cvs.height);
+
+  ctx.fillStyle = '#fbbf24';
+  ctx.beginPath();
+  ctx.arc(cvs.width*0.85, cvs.height*0.15, 32, 0, Math.PI*2);
+  ctx.fill();
+
+  ctx.fillStyle = '#fde68a';
+  ctx.fillRect(0, cvs.height*0.72, cvs.width, cvs.height*0.28);
+
+  ctx.fillStyle = '#0ea5e9';
+  ctx.fillRect(0, cvs.height*0.78, cvs.width, cvs.height*0.22);
+
+  // onda simples
+  ctx.fillStyle = 'rgba(255,255,255,0.5)';
+  ctx.beginPath();
+  ctx.moveTo(x, cvs.height*0.78);
+  ctx.quadraticCurveTo(x+90, cvs.height*0.78-40, x+180, cvs.height*0.78);
+  ctx.lineTo(x+180, cvs.height*0.78+40);
+  ctx.lineTo(x, cvs.height*0.78+40);
+  ctx.closePath();
+  ctx.fill();
+
+  // surfista simples
+  ctx.fillStyle = '#22c55e';
+  ctx.fillRect(x+60, cvs.height*0.75-32, 32, 32);
+
+  x += vx;
+  if(x > cvs.width) x = -180;
+
+  ctx.fillStyle = '#fff';
+  ctx.font = '14px system-ui';
+  ctx.fillText('TESTE MÍNIMO — SE ISSO APARECER, O CANVAS FUNCIONA', 10, 30);
+
+  requestAnimationFrame(loop);
+}
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>
