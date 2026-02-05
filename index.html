@@ -642,8 +642,8 @@
     ctx.textAlign='left'; ctx.textBaseline='middle';
     for(let i=0;i<state.maxLives;i++){
       const px = x + i*spacing;
-      const filled = i < state.lives;
-      ctx.fillStyle = filled ? '#ef4444' : '#374151';
+      if(i >= state.lives) continue;
+      ctx.fillStyle = '#ef4444';
       ctx.font = `${size}px sans-serif`;
       ctx.fillText('♥', px, y);
     }
