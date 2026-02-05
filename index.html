@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no"/>
-<title>Orion & Yamin — Corrida da Aventura</title>
+<title>Orion & Yasminn — Corrida da Aventura</title>
 <style>
   html,body{height:100%;margin:0;background:#000;font-family:system-ui,Segoe UI,Roboto,Helvetica,Arial}
   .wrap{display:grid;place-items:center;height:100%;gap:12px;padding:12px}
@@ -39,12 +39,12 @@
 
   function cardTint(id){
     if(id.startsWith('orion')) return 'rgba(56, 189, 248, 0.22)';
-    if(id.startsWith('yamin')) return 'rgba(244, 114, 182, 0.22)';
+    if(id.startsWith('yasminn')) return 'rgba(244, 114, 182, 0.22)';
     return 'rgba(255,255,255,0.12)';
   }
   function cardStroke(id){
     if(id.startsWith('orion')) return 'rgba(56, 189, 248, 0.65)';
-    if(id.startsWith('yamin')) return 'rgba(244, 114, 182, 0.65)';
+    if(id.startsWith('yasminn')) return 'rgba(244, 114, 182, 0.65)';
     return 'rgba(255,255,255,0.42)';
   }
 
@@ -85,10 +85,11 @@
 
   function getStartButtonRect(){
     const w=cvs.clientWidth,h=cvs.clientHeight;
-    const btnW = Math.min(360, Math.round(w*0.74));
-    const btnH = Math.max(44, Math.round(h*0.075));
+    const sidePad = Math.round(w*0.06);
+    const btnW = Math.min(420, Math.max(220, w - sidePad*2));
+    const btnH = Math.max(44, Math.min(74, Math.round(h*0.085)));
     const bx = Math.round((w-btnW)/2);
-    const by = Math.round(h*0.90 - btnH/2);
+    const by = Math.round(Math.min(h - btnH - 10, h*0.90 - btnH/2));
     return {x:bx, y:by, w:btnW, h:btnH};
   }
 
@@ -126,7 +127,7 @@
     ctx.fillStyle = vg;
     ctx.fillRect(0,0,w,h);
 
-    // destaque dos personagens (orion e yamin)
+    // destaque dos personagens (orion e yasminn)
     const s1 = SHEETS.sprite1?.spr?.ready && SHEETS.sprite1?.img?.complete;
     const s2 = SHEETS.sprite2?.spr?.ready && SHEETS.sprite2?.img?.complete;
     if(s1 || s2){
@@ -137,7 +138,7 @@
       ctx.imageSmoothingEnabled = false;
       const f = runFrameAt(now);
       if(s2){
-        const r = frameRectFor('yamin', f);
+        const r = frameRectFor('yasminn', f);
         const img = SHEETS[r.sheetId].img;
         ctx.drawImage(img, r.sx, r.sy, r.sw, r.sh, Math.round(w*0.10), Math.round(h*0.72)-size, size, size);
       }
@@ -213,7 +214,7 @@
     comp.connect(ctx.destination);
 
     // fade in
-    master.gain.setTargetAtTime(0.22, ctx.currentTime, 0.12);
+    master.gain.setTargetAtTime(0.32, ctx.currentTime, 0.12);
 
     // sequências simples estilo "aventura infantil"
     const scale = [0, 2, 4, 5, 7, 9, 11]; // maior
@@ -290,7 +291,7 @@
     const ctx = ensureAudioCtx();
     if(!ctx) return;
     if(rainSfx) {
-      try { rainSfx.gain.gain.setTargetAtTime(0.02 + 0.06*(intensity||0), ctx.currentTime, 0.15); } catch(e) {}
+      try { rainSfx.gain.gain.setTargetAtTime(0.04 + 0.10*(intensity||0), ctx.currentTime, 0.15); } catch(e) {}
       return;
     }
     const sr = ctx.sampleRate;
@@ -348,12 +349,51 @@
     src.connect(lp);
     lp.connect(gain);
     gain.connect(ctx.destination);
-    const g = 0.10 + 0.12*(strength||0);
+    const s = Math.max(0, Math.min(1, strength || 0));
+    const g = 0.12 + 0.32*s;
     gain.gain.setValueAtTime(0.0001, t0);
     gain.gain.exponentialRampToValueAtTime(g, t0 + 0.05);
     gain.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
     src.start(t0);
     src.stop(t0 + dur + 0.05);
+  }
+
+  function playLightningCrack(strength){
+    const ctx = ensureAudioCtx();
+    if(!ctx) return;
+    const t0 = ctx.currentTime;
+    const s = Math.max(0, Math.min(1, strength || 0));
+    const dur = 0.10;
+    const sr = ctx.sampleRate;
+    const len = Math.floor(sr * dur);
+    const buf = ctx.createBuffer(1, len, sr);
+    const data = buf.getChannelData(0);
+    for(let i=0;i<len;i++){
+      const x = i/len;
+      const env = Math.exp(-18*x);
+      data[i] = (Math.random()*2-1) * env;
+    }
+    const src = ctx.createBufferSource();
+    src.buffer = buf;
+    const hp = ctx.createBiquadFilter();
+    hp.type = 'highpass';
+    hp.frequency.value = 1400;
+    const bp = ctx.createBiquadFilter();
+    bp.type = 'bandpass';
+    bp.frequency.value = 2600;
+    bp.Q.value = 0.9;
+    const gain = ctx.createGain();
+    gain.gain.value = 0;
+    src.connect(hp);
+    hp.connect(bp);
+    bp.connect(gain);
+    gain.connect(ctx.destination);
+    const g = 0.06 + 0.14*s;
+    gain.gain.setValueAtTime(0.0001, t0);
+    gain.gain.exponentialRampToValueAtTime(g, t0 + 0.01);
+    gain.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+    src.start(t0);
+    src.stop(t0 + dur + 0.02);
   }
 
   function softenJump(){
@@ -459,10 +499,10 @@
     orion_shark: { name:'Orion (Tubarão)', sheetId:'sprite1', row:2, trim:{l:6,t:0,r:10,b:0}, bounds:null },
     orion_bear: { name:'Orion (Urso)', sheetId:'sprite1', row:3, trim:{l:1,t:0,r:1,b:0}, bounds:null },
 
-    yamin: { name:'Yamin', sheetId:'sprite2', row:0, trim:{l:1,t:0,r:1,b:0}, bounds:null },
-    yamin_dino: { name:'Yamin (Dino)', sheetId:'sprite2', row:1, trim:{l:1,t:2,r:3,b:1}, bounds:null },
-    yamin_shark: { name:'Yamin (Tubarão)', sheetId:'sprite2', row:2, trim:{l:6,t:0,r:10,b:0}, bounds:null },
-    yamin_bear: { name:'Yamin (Urso)', sheetId:'sprite2', row:3, trim:{l:1,t:0,r:1,b:0}, bounds:null }
+    yasminn: { name:'Yasminn', sheetId:'sprite2', row:0, trim:{l:1,t:0,r:1,b:0}, bounds:null },
+    yasminn_dino: { name:'Yasminn (Dino)', sheetId:'sprite2', row:1, trim:{l:1,t:2,r:3,b:1}, bounds:null },
+    yasminn_shark: { name:'Yasminn (Tubarão)', sheetId:'sprite2', row:2, trim:{l:6,t:0,r:10,b:0}, bounds:null },
+    yasminn_bear: { name:'Yasminn (Urso)', sheetId:'sprite2', row:3, trim:{l:1,t:0,r:1,b:0}, bounds:null }
   };
   let currentCharacter = 'orion';
 
@@ -561,13 +601,16 @@
     upgradeAt: 10,
     upgradeOptions: null,
     startBtn: null,
+    lives: 3,
+    maxLives: 3,
     power: {
       invulnUntil: 0,
       jumpUntil: 0,
       slowUntil: 0,
       cdInvuln: 0,
       cdJump: 0,
-      cdSlow: 0
+      cdSlow: 0,
+      cdLife: 0
     }
   };
   document.getElementById('hi').textContent = '0';
@@ -594,12 +637,182 @@
   };
   const player = { y:0, vy:0, onGround:true, t:0, f:0, scale:1.2 };
 
+  function drawHearts(x, y, size, spacing){
+    ctx.save();
+    ctx.textAlign='left'; ctx.textBaseline='middle';
+    for(let i=0;i<state.maxLives;i++){
+      const px = x + i*spacing;
+      const filled = i < state.lives;
+      ctx.fillStyle = filled ? '#ef4444' : '#374151';
+      ctx.font = `${size}px sans-serif`;
+      ctx.fillText('♥', px, y);
+    }
+    ctx.restore();
+  }
+
+  function drawRainLayer(w, h, now, intensity, isStorm, yMaxMul, alphaBoost, widthBoost, lenBoost){
+    const rain = Math.max(0, Math.min(1, intensity || 0));
+    const baseDrops = isStorm ? 380 : 280;
+    const drops = Math.floor(baseDrops * rain);
+    const yMax = Math.max(1, h * (yMaxMul || 1));
+    ctx.save();
+    const a0 = isStorm ? (0.8 + rain*0.2) : (0.7 + rain*0.2);
+    const a = Math.min(1, a0 * (alphaBoost || 1));
+    ctx.strokeStyle = isStorm
+      ? `rgba(100,140,200,${a})`
+      : `rgba(120,160,220,${a})`;
+    ctx.lineWidth = (isStorm ? 4 : 3) * (widthBoost || 1);
+    for(let i=0;i<drops;i++){
+      const x = (Math.random()*w + now*0.3) % w;
+      const y = (Math.random()*yMax + now*0.8) % yMax;
+      const len = (isStorm ? (15 + rain*20) : (12 + rain*18)) * (lenBoost || 1);
+      const angle = isStorm ? -2.5 : -2;
+      ctx.beginPath();
+      ctx.moveTo(x, y);
+      ctx.lineTo(x + angle, y + len);
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  function drawGround(w, h, phase, weather, scrollX){
+    const groundY = GY() + UNIT()*0.5;
+    const groundH = h - groundY;
+    // Base do chão (cor da fase)
+    ctx.fillStyle = phase.ground;
+    ctx.fillRect(0, groundY, w, groundH);
+    const isDay = weather && weather.type === 'day';
+    const isNight = weather && weather.type === 'night';
+    const isRain = weather && (weather.type === 'rain');
+    const isStorm = weather && (weather.type === 'storm');
+    const rainAmt = weather ? (weather.rain || 0) : 0;
+
+    const u = UNIT();
+    const sx = (scrollX || 0);
+    const seed = 1337 + Math.floor((sx || 0) * 0.01);
+    const hash01 = (n) => {
+      const x = Math.sin(n * 999.123 + seed * 0.017) * 43758.5453;
+      return x - Math.floor(x);
+    };
+
+    const topH = Math.max(10, Math.round(u*1.15));
+    const patternStep = Math.max(16, Math.round(u*2.8));
+    const off = ((sx*0.8) % patternStep);
+
+    // Grama (dia): faixa verde estática com "dentinhos" retangulares
+    if(isDay && !(isRain || isStorm)){
+      ctx.fillStyle = '#2fae4f';
+      ctx.fillRect(0, groundY, w, topH);
+      ctx.fillStyle = 'rgba(10,70,25,0.28)';
+      for(let x=-patternStep; x<w+patternStep; x+=patternStep){
+        const k = Math.floor((x + sx*0.2)/patternStep);
+        const h1 = Math.round(u*(0.35 + hash01(k*3.1)*0.65));
+        ctx.fillRect(x - off + Math.round(patternStep*0.15), groundY + topH - h1, Math.round(patternStep*0.12), h1);
+        ctx.fillRect(x - off + Math.round(patternStep*0.42), groundY + topH - Math.round(h1*0.75), Math.round(patternStep*0.10), Math.round(h1*0.75));
+        ctx.fillRect(x - off + Math.round(patternStep*0.70), groundY + topH - Math.round(h1*0.55), Math.round(patternStep*0.08), Math.round(h1*0.55));
+      }
+    }
+
+    // Lama (chuva/temporal): marrom escuro com faixas horizontais
+    if((isRain || isStorm) && rainAmt > 0){
+      ctx.fillStyle = '#5a3f2b';
+      ctx.fillRect(0, groundY, w, groundH);
+      ctx.fillStyle = 'rgba(0,0,0,0.16)';
+      for(let y=groundY + Math.round(u*1.0); y<groundY + groundH; y+=Math.max(10, Math.round(u*1.6))){
+        ctx.fillRect(0, y, w, Math.max(2, Math.round(u*0.22)));
+      }
+      // poças retangulares (estáticas, sem bolinhas)
+      const puddleStep = Math.max(46, Math.round(u*7.2));
+      const puddleOff = ((sx*0.55) % puddleStep);
+      for(let x=-puddleStep*2; x<w+puddleStep*2; x+=puddleStep){
+        const k = Math.floor((x + sx*0.3)/puddleStep);
+        if(hash01(k*5.7) < 0.55) continue;
+        const px = x - puddleOff + puddleStep*(0.18 + 0.55*hash01(k*2.3));
+        const py = groundY + topH + (groundH*0.35 + groundH*0.35*hash01(k*9.1));
+        const pw = puddleStep*(0.55 + 0.35*hash01(k*4.9));
+        const ph = Math.max(7, Math.round(u*(0.75 + 0.9*hash01(k*6.1))));
+        ctx.fillStyle = 'rgba(120,160,210,0.38)';
+        ctx.fillRect(px, py, pw, ph);
+        ctx.fillStyle = 'rgba(255,255,255,0.14)';
+        ctx.fillRect(px + pw*0.12, py + ph*0.20, pw*0.28, Math.max(2, ph*0.25));
+      }
+    }
+
+    // Pedra/estrada (noite/tempestade): cinza com blocos retangulares
+    if((isNight || phase?.name === 'Noite' || phase?.name === 'Tempestade') && !(isRain || isStorm)){
+      ctx.fillStyle = '#6f6f6f';
+      ctx.fillRect(0, groundY, w, groundH);
+      ctx.fillStyle = 'rgba(0,0,0,0.12)';
+      for(let x=-patternStep; x<w+patternStep; x+=patternStep){
+        const k = Math.floor((x + sx*0.25)/patternStep);
+        const bw = Math.round(patternStep*(0.35 + 0.55*hash01(k*2.7)));
+        const bh = Math.round(u*(0.55 + 0.85*hash01(k*4.1)));
+        const bx = x - off + Math.round(patternStep*0.20);
+        const by = groundY + topH + Math.round(groundH*0.18 + groundH*0.55*hash01(k*6.9));
+        ctx.fillRect(bx, by, bw, bh);
+      }
+      // faixa de estrada
+      const roadH = Math.max(16, Math.round(u*2.2));
+      const roadY = groundY + topH + Math.max(10, Math.round(groundH*0.42));
+      ctx.fillStyle = 'rgba(15, 23, 42, 0.16)';
+      ctx.fillRect(0, roadY, w, roadH);
+      const dashW = Math.max(18, Math.round(u*2.8));
+      const dashGap = Math.max(14, Math.round(u*2.2));
+      const cycle = dashW + dashGap;
+      const dashOff = ((sx*0.75) % cycle);
+      ctx.fillStyle = 'rgba(255,255,255,0.16)';
+      for(let x=-cycle; x<w+cycle; x+=cycle){
+        ctx.fillRect(x - dashOff, roadY + roadH*0.45, dashW, Math.max(2, Math.round(u*0.22)));
+      }
+    }
+
+    // Detalhe de linha superior (sombra)
+    ctx.fillStyle='rgba(0,0,0,.12)';
+    ctx.fillRect(0, groundY, w, 3);
+  }
+
+  function drawSun(w, h, weather){
+    if(weather && (weather.type === 'day' || weather.type === 'fog')){
+      const sunX = w*0.85;
+      const sunY = h*0.15;
+      const sunR = Math.min(56, Math.min(w,h)*0.12);
+      ctx.save();
+      ctx.globalAlpha = weather.type === 'fog' ? 0.3 : 0.9;
+      ctx.fillStyle = '#ffd700';
+      ctx.beginPath(); ctx.arc(sunX, sunY, sunR, 0, Math.PI*2); ctx.fill();
+      ctx.globalAlpha = 0.3;
+      ctx.fillStyle = '#ffed4e';
+      ctx.beginPath(); ctx.arc(sunX, sunY, sunR*1.4, 0, Math.PI*2); ctx.fill();
+      ctx.restore();
+    }
+  }
+
+  function drawBirds(w, h, weather, now){
+    if(weather && weather.type !== 'storm' && Math.random() < 0.3){
+      ctx.save();
+      ctx.fillStyle = weather.type === 'night' ? '#444' : '#222';
+      for(let i=0; i<3; i++){
+        const t = (now/1000 + i*2) % 8;
+        const x = ((t/8)*w*1.4 - w*0.2) % w;
+        const y = h*0.25 + Math.sin(t)*h*0.06;
+        const size = 32 + Math.sin(t*2)*12;
+        ctx.beginPath();
+        ctx.moveTo(x, y);
+        ctx.lineTo(x - size, y + size*0.7);
+        ctx.lineTo(x + size, y + size*0.7);
+        ctx.closePath();
+        ctx.fill();
+      }
+      ctx.restore();
+    }
+  }
+
   function pickWeather(){
     const r = Math.random();
-    if(r < 0.38) return { type:'day', tint:'rgba(0,0,0,0)', rain:0, fog:0 };
-    if(r < 0.62) return { type:'night', tint:'rgba(10,20,45,0.35)', rain:0, fog:0.05 };
-    if(r < 0.78) return { type:'fog', tint:'rgba(220,230,255,0.16)', rain:0, fog:0.22 };
-    if(r < 0.93) return { type:'rain', tint:'rgba(30,40,70,0.20)', rain:0.55, fog:0.10 };
+    if(r < 0.25) return { type:'day', tint:'rgba(0,0,0,0)', rain:0, fog:0 };
+    if(r < 0.45) return { type:'night', tint:'rgba(10,20,45,0.35)', rain:0, fog:0.05 };
+    if(r < 0.55) return { type:'fog', tint:'rgba(220,230,255,0.16)', rain:0, fog:0.22 };
+    if(r < 0.80) return { type:'rain', tint:'rgba(30,40,70,0.20)', rain:0.55, fog:0.10 };
     return { type:'storm', tint:'rgba(10,10,20,0.35)', rain:0.85, fog:0.14 };
   }
 
@@ -626,19 +839,22 @@
     state.power.cdInvuln = 0;
     state.power.cdJump = 0;
     state.power.cdSlow = 0;
+    state.power.cdLife = 0;
+    state.lives = state.maxLives;
     state.weather = pickWeather();
     state.lightning = 0;
     state.nextLightningAt = performance.now() + 2500 + Math.random()*2500;
     world.speed=world.baseSpeed();
     world.obstacles.length=0;
     world.dist=0;
-    world.clouds = Array.from({length:8}, () => ({
+    world.clouds = Array.from({length:18}, (_,i) => ({
       x: Math.random()*cvs.clientWidth,
-      y: Math.random()*cvs.clientHeight*0.35,
-      r: 20 + Math.random()*45,
-      layer: Math.random()<0.5 ? 0 : 1
+      y: i < 12 ? (Math.random()*cvs.clientHeight*0.32) : (cvs.clientHeight*0.18 + Math.random()*cvs.clientHeight*0.38),
+      r: (i < 12 ? (18 + Math.random()*42) : (24 + Math.random()*58)),
+      layer: Math.random()<0.5 ? 0 : 1,
+      band: i < 12 ? 'high' : 'low'
     }));
-    player.y = GY() - 4.2*UNIT(); player.vy=0; player.onGround=true; player.t=0; player.f=0;
+    player.y = GY() - 3.4*UNIT(); player.vy=0; player.onGround=true; player.t=0; player.f=0;
 
     // sfx de clima
     if(state.weather && state.weather.rain > 0) startRainSfx(state.weather.rain);
@@ -658,12 +874,15 @@
     {
     }
     // botão JOGAR
-    const btnW = Math.min(320, Math.round(w*0.55));
-    const btnH = Math.round(btnW*0.24);
-    const bx = Math.round((w-btnW)/2), by = Math.round(h*0.80);
+    const sidePad = Math.round(w*0.06);
+    const btnW = Math.min(340, Math.max(220, w - sidePad*2));
+    const btnH = Math.max(44, Math.min(70, Math.round(h*0.085)));
+    const bx = Math.round((w-btnW)/2);
+    const by = Math.round(Math.min(h - btnH - 12, h*0.80));
     ctx.fillStyle = '#e8d3ac'; ctx.fillRect(bx,by,btnW,btnH);
     ctx.fillStyle = '#6b4b26'; ctx.fillRect(bx,by+btnH-6,btnW,6);
-    ctx.fillStyle = '#5a4634'; ctx.font = `bold ${Math.round(btnH*0.45)}px system-ui`;
+    ctx.fillStyle = '#5a4634';
+    ctx.font = `bold ${Math.round(btnH*0.48)}px system-ui`;
     ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillText('JOGAR', bx+btnW/2, by+btnH*0.55);
   }
 
@@ -675,7 +894,7 @@
 
     ctx.fillStyle='#e8d3ac';
     ctx.textAlign='center'; ctx.textBaseline='middle';
-    const title = 'ORION & YAMIN — CORRIDA DA AVENTURA';
+    const title = 'ORION & YASMINN — CORRIDA DA AVENTURA';
     let titleSize = Math.round(h*0.055);
     ctx.font = `bold ${titleSize}px system-ui`;
     while(titleSize > 18 && ctx.measureText(title).width > w*0.92){
@@ -683,9 +902,23 @@
       ctx.font = `bold ${titleSize}px system-ui`;
     }
     ctx.fillText(title, w/2, h*0.10);
-    ctx.font=`${Math.round(h*0.032)}px system-ui`;
     ctx.fillStyle='rgba(255,255,255,0.88)';
-    ctx.fillText('Escolha sua fantasia e corra!', w/2, h*0.145);
+    const subtitle = 'Escolha sua fantasia e corra!';
+    let subSize = Math.round(h*0.032);
+    ctx.font = `${subSize}px system-ui`;
+    while(subSize > 12 && ctx.measureText(subtitle).width > w*0.90){
+      subSize = Math.round(subSize * 0.92);
+      ctx.font = `${subSize}px system-ui`;
+    }
+    if(ctx.measureText(subtitle).width <= w*0.90){
+      ctx.fillText(subtitle, w/2, h*0.145);
+    } else {
+      const subFont = `${subSize}px system-ui`;
+      wrapTextCentered(subtitle, w/2, h*0.145, w*0.90, Math.round(subSize*1.15), subFont);
+    }
+
+    // botão COMEÇAR (usado também para limitar o grid no mobile)
+    const br = getStartButtonRect();
 
     const cards = Object.entries(CHARACTERS);
     const cols = w >= 860 ? 4 : (w >= 520 ? 3 : 2);
@@ -694,7 +927,9 @@
     const gapY = Math.round(h*0.028);
     const startY = Math.round(h*0.20);
     const availW = w - gapX*(cols+1);
-    const availH = h*0.66;
+    const bottomPad = Math.max(10, Math.round(h*0.02));
+    const bottomLimit = Math.max(startY + 60, br.y - bottomPad);
+    const availH = Math.max(0, bottomLimit - startY);
     const cardW = Math.floor(availW / cols);
     const cardH = Math.floor(Math.min(cardW*0.82, (availH - gapY*(rows-1)) / rows));
 
@@ -729,23 +964,44 @@
       }
 
       ctx.fillStyle='#fff';
-      ctx.font=`bold ${Math.round(cardH*0.105)}px system-ui`;
       ctx.textAlign='left';
       const nameX = cx + Math.round(cardW*0.52);
       const nameY = cy + Math.round(cardH*0.40);
-      let nm = ch.name;
       const maxW = cx + cardW - nameX - Math.round(cardW*0.04);
+
+      let nameSize = Math.round(cardH*0.105);
+      let nm = ch.name;
+      ctx.font = `bold ${nameSize}px system-ui`;
+      while(nameSize > 11 && ctx.measureText(nm).width > maxW){
+        nameSize = Math.round(nameSize*0.92);
+        ctx.font = `bold ${nameSize}px system-ui`;
+      }
       while(nm.length > 0 && ctx.measureText(nm).width > maxW) nm = nm.slice(0, -1);
       if(nm !== ch.name) nm = nm.slice(0, Math.max(0, nm.length-1)) + '…';
       ctx.fillText(nm, nameX, nameY);
-      ctx.font=`${Math.round(cardH*0.08)}px system-ui`;
+
       ctx.fillStyle='rgba(255,255,255,0.8)';
-      ctx.fillText('Toque p/ escolher', nameX, cy + Math.round(cardH*0.58));
+      let hint = 'Toque p/ escolher';
+      let hintSize = Math.round(cardH*0.08);
+      ctx.font = `${hintSize}px system-ui`;
+      while(hintSize > 10 && ctx.measureText(hint).width > maxW){
+        hintSize = Math.round(hintSize*0.92);
+        ctx.font = `${hintSize}px system-ui`;
+      }
+      if(ctx.measureText(hint).width > maxW) hint = 'Toque';
+      ctx.fillText(hint, nameX, cy + Math.round(cardH*0.58));
 
       const best = Number(bestByCharacter[id] || 0);
-      ctx.font=`${Math.round(cardH*0.078)}px system-ui`;
       ctx.fillStyle='rgba(255,255,255,0.90)';
-      ctx.fillText(`Melhor: ${best}`, nameX, cy + Math.round(cardH*0.76));
+      let bestLine = `Melhor: ${best}`;
+      let bestSize = Math.round(cardH*0.078);
+      ctx.font = `${bestSize}px system-ui`;
+      while(bestSize > 10 && ctx.measureText(bestLine).width > maxW){
+        bestSize = Math.round(bestSize*0.92);
+        ctx.font = `${bestSize}px system-ui`;
+      }
+      if(ctx.measureText(bestLine).width > maxW) bestLine = `${best}`;
+      ctx.fillText(bestLine, nameX, cy + Math.round(cardH*0.76));
     }
 
     ctx.textAlign='center';
@@ -753,10 +1009,10 @@
     ctx.font=`${Math.round(h*0.03)}px system-ui`;
     const bestName = bestCharacterId && CHARACTERS[bestCharacterId] ? CHARACTERS[bestCharacterId].name : '';
     const msg = bestName ? `Record: ${bestCharacterScore} (${bestName})` : `Record: ${bestCharacterScore || 0}`;
-    ctx.fillText(msg, w/2, h*0.83);
+    const recordY = Math.min(br.y - Math.round(br.h*0.55), bottomLimit - Math.round(h*0.02));
+    ctx.fillText(msg, w/2, recordY);
 
     // botão COMEÇAR
-    const br = getStartButtonRect();
     ctx.fillStyle = 'rgba(232,211,172,0.95)';
     ctx.fillRect(br.x, br.y, br.w, br.h);
     ctx.fillStyle = 'rgba(107,75,38,1)';
@@ -775,15 +1031,16 @@
     function spawn(){
       const u=UNIT();
       const s=1+Math.floor(Math.random()*3);
-      const w=(0.9+0.5*s)*u*2, h=(2+0.8*s)*u*1;
+      const w=(0.9+0.5*s)*u*2, h=(1.2+0.5*s)*u*1;
       const gap=u*(20+Math.random()*16);
       const cactusIndex = Math.floor(Math.random()*14); // de 0 a 13
-      world.obstacles.push({x:cvs.clientWidth+gap,y:GY()-h,w,h,cactusIndex});
+      world.obstacles.push({x:cvs.clientWidth+gap,y:GY()-h+UNIT()*0.8,w,h,cactusIndex});
     }
     
 
   function pickCharacterAt(x,y){
     const w=cvs.clientWidth,h=cvs.clientHeight;
+    const br = getStartButtonRect();
     const cards = Object.entries(CHARACTERS);
     const cols = w >= 860 ? 4 : (w >= 520 ? 3 : 2);
     const rows = Math.ceil(cards.length / cols);
@@ -791,7 +1048,9 @@
     const gapY = Math.round(h*0.028);
     const startY = Math.round(h*0.20);
     const availW = w - gapX*(cols+1);
-    const availH = h*0.66;
+    const bottomPad = Math.max(10, Math.round(h*0.02));
+    const bottomLimit = Math.max(startY + 60, br.y - bottomPad);
+    const availH = Math.max(0, bottomLimit - startY);
     const cardW = Math.floor(availW / cols);
     const cardH = Math.floor(Math.min(cardW*0.82, (availH - gapY*(rows-1)) / rows));
     for(let i=0;i<cards.length;i++){
@@ -837,6 +1096,12 @@
       lp.frequency.value = 1200;
       o.frequency.setValueAtTime(220, t0);
       o.frequency.exponentialRampToValueAtTime(165, t0 + 0.35);
+    }
+    if(id==='life'){
+      o.type = 'sine';
+      o.frequency.setValueAtTime(440, t0);
+      o.frequency.exponentialRampToValueAtTime(880, t0 + 0.12);
+      o.frequency.exponentialRampToValueAtTime(660, t0 + 0.28);
     }
 
     g.gain.setValueAtTime(0.0001, t0);
@@ -886,16 +1151,26 @@
       state.power.slowUntil = now + 5000;
       state.power.cdSlow = 20;
     }
+    if(id==='life'){
+      state.lives = Math.min(state.maxLives, state.lives + 1);
+      state.power.cdLife = 20;
+    }
     playUpgradeSfx(id);
     state.mode = 'play';
   }
 
   function openUpgrade(){
-    const opts = [
+    const allOpts = [
       { id:'invuln', title:'Invencível', desc:'Sem dano por 5 segundos', disabled: state.power.cdInvuln > 0 },
       { id:'jump', title:'Pulo alto', desc:'Pulo + alto por 5 segundos', disabled: state.power.cdJump > 0 },
-      { id:'slow', title:'Mais lento', desc:'Diminui a velocidade por 5 segundos', disabled: state.power.cdSlow > 0 }
+      { id:'slow', title:'Mais lento', desc:'Diminui a velocidade por 5 segundos', disabled: state.power.cdSlow > 0 },
+      { id:'life', title:'Ganhar vida', desc:'+1 coração (máx 3)', disabled: state.power.cdLife > 0 || state.lives >= state.maxLives }
     ];
+    // Sorteia 3 das 4 opções, com menor chance de incluir 'life'
+    const includeLife = Math.random() < 0.25; // 25% de chance de incluir vida
+    const filtered = includeLife ? allOpts : allOpts.filter(o => o.id !== 'life');
+    const shuffled = filtered.sort(() => Math.random() - 0.5);
+    const opts = shuffled.slice(0, 3);
     state.upgradeOptions = opts;
     state.mode = 'upgrade';
   }
@@ -960,7 +1235,7 @@
       if(o.disabled){
         ctx.font = `${Math.round(cardH*0.12)}px system-ui`;
         ctx.fillStyle = 'rgba(255,255,255,0.32)';
-        const cd = o.id==='invuln' ? state.power.cdInvuln : (o.id==='jump' ? state.power.cdJump : state.power.cdSlow);
+        const cd = o.id==='invuln' ? state.power.cdInvuln : (o.id==='jump' ? state.power.cdJump : (o.id==='slow' ? state.power.cdSlow : state.power.cdLife));
         ctx.fillText(`Disponível em ${cd}`, cx+cardW/2, cy+cardH*0.82);
       } else {
         ctx.font = `${Math.round(cardH*0.12)}px system-ui`;
@@ -1058,19 +1333,22 @@
 
   let last=performance.now();
   function loop(now){
-    const dt=Math.min(0.032,(now-last)/1000); last=now;
-    if(state.mode==='characterSelect'){
-      drawCharacterSelect(now);
-      requestAnimationFrame(loop); return;
-    }
-    if(state.mode==='upgrade'){
-      drawUpgrade(now);
-      requestAnimationFrame(loop); return;
-    }
-    if(state.mode==='menu'){
-      drawMenu();
-      requestAnimationFrame(loop); return;
-    }
+    try {
+      const dt=Math.min(0.032,(now-last)/1000); last=now;
+      // Garante que o modo seja 'play' se estiver undefined
+      if(!state.mode) state.mode='play';
+      if(state.mode==='characterSelect'){
+        drawCharacterSelect(now);
+        requestAnimationFrame(loop); return;
+      }
+      if(state.mode==='upgrade'){
+        drawUpgrade(now);
+        requestAnimationFrame(loop); return;
+      }
+      if(state.mode==='menu'){
+        drawMenu();
+        requestAnimationFrame(loop); return;
+      }
 
     
     // ====== JOGO ======
@@ -1089,17 +1367,42 @@
     ctx.fillStyle = grad;
     ctx.fillRect(0,0,w,h);
 
-    // HUD dentro do canvas (score/hi/record)
+    drawSun(w, h, state.weather);
+
+    // HUD dentro do canvas (score/hi/record + vidas)
     {
       const bestName = bestCharacterId && CHARACTERS[bestCharacterId] ? CHARACTERS[bestCharacterId].name : '';
       const rec = bestName ? `${bestCharacterScore} (${bestName})` : `${bestCharacterScore || 0}`;
-      ctx.save();
-      const text = `SCORE ${state.score}   •   RECORD ${rec}`;
+      let text = `SCORE ${state.score}   •   RECORD ${rec}`;
       const boxH = Math.max(34, Math.round(h*0.055));
-      ctx.font = `800 ${Math.round(boxH*0.40)}px system-ui`;
-      const tw = ctx.measureText(text).width;
+      const heartSize = Math.round(boxH*0.55);
+      const heartSpacing = Math.round(heartSize*1.1);
+      const heartsW = state.maxLives*heartSpacing;
       const padX = Math.round(boxH*0.55);
-      const boxW = Math.min(w - 16, Math.round(tw + padX*2));
+      const maxBoxW = w - 16;
+
+      // fonte adaptativa + texto compacto para telas estreitas
+      let fontSize = Math.round(boxH*0.40);
+      const measure = () => {
+        ctx.font = `800 ${fontSize}px system-ui`;
+        return ctx.measureText(text).width;
+      };
+      let tw = measure();
+      while(fontSize > 11 && (tw + padX*3 + heartsW) > maxBoxW){
+        fontSize = Math.round(fontSize*0.92);
+        tw = measure();
+      }
+      if((tw + padX*3 + heartsW) > maxBoxW){
+        text = `S ${state.score} • R ${bestCharacterScore || 0}`;
+        fontSize = Math.max(11, Math.round(boxH*0.38));
+        tw = measure();
+        while(fontSize > 10 && (tw + padX*3 + heartsW) > maxBoxW){
+          fontSize = Math.round(fontSize*0.92);
+          tw = measure();
+        }
+      }
+
+      const boxW = Math.min(maxBoxW, Math.round(tw + padX*3 + heartsW));
       const x = Math.round((w - boxW)/2);
       const y = Math.round(h*0.02);
       // sombra
@@ -1111,66 +1414,78 @@
       ctx.strokeStyle = 'rgba(255,255,255,0.18)';
       ctx.lineWidth = 2;
       ctx.strokeRect(x+1, y+1, boxW-2, boxH-2);
+      // texto
       ctx.fillStyle = '#fff';
       ctx.textAlign='center'; ctx.textBaseline='middle';
-      ctx.fillText(text, x + boxW/2, y + boxH/2);
+      ctx.fillText(text, x + boxW/2 - heartsW*0.52, y + boxH/2);
+      // corações
+      drawHearts(x + boxW - padX - heartsW, y + boxH/2, heartSize, heartSpacing);
       ctx.restore();
     }
 
     // relâmpago (temporal)
     if(state.weather && (state.weather.type === 'storm')) {
       if(now >= state.nextLightningAt) {
-        state.lightning = 0.22 + Math.random()*0.35;
+        state.lightning = 0.65 + Math.random()*0.35;
         state.nextLightningAt = now + 2500 + Math.random()*5000;
-        playThunder(0.8);
+        // volume do trovão acompanha a intensidade do tema (chuva/temporal)
+        const stormStrength = Math.max(0, Math.min(1, (state.weather.rain || 0.85)));
+        playLightningCrack(0.75 + 0.25*stormStrength);
+        playThunder(0.65 + 0.35*stormStrength);
       }
     }
-    if(state.lightning > 0) state.lightning = Math.max(0, state.lightning - dt*1.6);
+    if(state.lightning > 0) state.lightning = Math.max(0, state.lightning - dt*0.9);
 
     const invulnOn = now < state.power.invulnUntil;
     const jumpOn = now < state.power.jumpUntil;
     const slowOn = now < state.power.slowUntil;
     const speedEff = world.speed * (slowOn ? 0.85 : 1.0);
 
-    // parallax de nuvens
     for(const c of world.clouds){
       const sp = (c.layer===0 ? 0.18 : 0.35) * speedEff * dt;
       c.x -= sp;
       if(c.x + c.r*2 < 0){
         c.x = w + c.r*2;
-        c.y = Math.random()*h*0.35;
-        c.r = 20 + Math.random()*45;
+        c.band = c.band || (Math.random() < 0.65 ? 'high' : 'low');
+        c.y = c.band === 'low' ? (h*0.18 + Math.random()*h*0.38) : (Math.random()*h*0.32);
+        c.r = c.band === 'low' ? (24 + Math.random()*58) : (18 + Math.random()*42);
         c.layer = Math.random()<0.5 ? 0 : 1;
       }
-      const a = c.layer===0 ? 0.25 : 0.38;
+      const a = c.band === 'low' ? (c.layer===0 ? 0.48 : 0.62) : (c.layer===0 ? 0.38 : 0.52);
       ctx.fillStyle = `rgba(255,255,255,${a})`;
       ctx.beginPath();
       ctx.arc(c.x, c.y, c.r*0.55, 0, Math.PI*2);
       ctx.arc(c.x + c.r*0.55, c.y + c.r*0.1, c.r*0.65, 0, Math.PI*2);
       ctx.arc(c.x + c.r*1.1, c.y, c.r*0.5, 0, Math.PI*2);
       ctx.fill();
+
+      ctx.fillStyle = `rgba(240,245,255,${a*0.45})`;
+      ctx.beginPath();
+      ctx.arc(c.x + c.r*0.25, c.y + c.r*0.05, c.r*0.42, 0, Math.PI*2);
+      ctx.arc(c.x + c.r*0.80, c.y + c.r*0.08, c.r*0.48, 0, Math.PI*2);
+      ctx.fill();
     }
 
-    // chão
-    ctx.fillStyle = ph.ground;
-    ctx.fillRect(0, GY()+UNIT()*0.5, w, h);
-    ctx.fillStyle='rgba(0,0,0,.10)';
-    ctx.fillRect(0, GY()+UNIT()*0.5, w, 2);
+    drawBirds(w, h, state.weather, now);
 
-    // chuva (camada por cima do fundo e nuvens)
+    // chão temático
     if(state.weather && state.weather.rain > 0) {
-      const rain = state.weather.rain;
-      const drops = Math.floor(180 * rain);
+      drawRainLayer(w, h, now, state.weather.rain, state.weather.type === 'storm', 0.9, 1.0, 1.0, 1.0);
+    }
+
+    drawGround(w, h, ph, state.weather, now*speedEff);
+
+    // respingos de chuva no chão (após desenhar o chão)
+    if(state.weather && state.weather.rain > 0 && state.weather.type === 'storm' && state.weather.rain > 0.7) {
       ctx.save();
-      ctx.strokeStyle = `rgba(200,220,255,${0.15 + rain*0.15})`;
+      ctx.strokeStyle = `rgba(200,220,255,${0.15 + state.weather.rain*0.10})`;
       ctx.lineWidth = 1;
-      for(let i=0;i<drops;i++){
-        const x = (Math.random()*w + now*0.25) % w;
-        const y = (Math.random()*h + now*0.6) % h;
-        const len = 6 + rain*10;
+      for(let i=0;i<15;i++){
+        const x = (Math.random()*w + now*0.1) % w;
+        const y = GY() + UNIT()*0.5 + (Math.random()*20);
         ctx.beginPath();
         ctx.moveTo(x, y);
-        ctx.lineTo(x - 2, y + len);
+        ctx.lineTo(x - 3, y - 3);
         ctx.stroke();
       }
       ctx.restore();
@@ -1191,7 +1506,11 @@
 
     // flash de relâmpago por cima de tudo
     if(state.lightning > 0) {
-      ctx.fillStyle = `rgba(255,255,255,${state.lightning})`;
+      const a = Math.max(0, Math.min(1, state.lightning));
+      ctx.fillStyle = `rgba(255,255,255,${a})`;
+      ctx.fillRect(0,0,w,h);
+      // segunda passada para ficar bem branco/forte
+      ctx.fillStyle = `rgba(255,255,255,${a*0.6})`;
       ctx.fillRect(0,0,w,h);
     }
 
@@ -1203,7 +1522,7 @@
 
     // física
     player.vy += world.gravity()*dt; player.y += player.vy*dt;
-    const gy = GY() - 4.2*UNIT(); if(player.y>=gy){ player.y=gy; player.vy=0; player.onGround=true; } else player.onGround=false;
+    const gy = GY() - 3.4*UNIT(); if(player.y>=gy){ player.y=gy; player.vy=0; player.onGround=true; } else player.onGround=false;
 
     // velocidade linear (com fase)
     world.speed += 0.12*UNIT()*dt * ph.speedMul;
@@ -1219,16 +1538,16 @@
     for(const o of world.obstacles){
       o.x -= speedEff*dt;
       
-    const cactus = cactusImages[o.cactusIndex || 0];
-    if (cactus.complete) {
-      const ratio = cactus.naturalHeight / cactus.naturalWidth;
-      const drawW = o.w;
-      const drawH = drawW * ratio;
-      ctx.drawImage(cactus, o.x, o.y - (drawH - o.h), drawW, drawH);
-    } else {
-      ctx.fillStyle='#2e7d32';
-      ctx.fillRect(o.x,o.y,o.w,o.h);
-    }
+      const cactus = (cactusImages && cactusImages[o.cactusIndex || 0]) ? cactusImages[o.cactusIndex || 0] : null;
+      if (cactus && cactus.complete) {
+        const ratio = cactus.naturalHeight / cactus.naturalWidth;
+        const drawW = o.w;
+        const drawH = drawW * ratio;
+        ctx.drawImage(cactus, o.x, o.y - (drawH - o.h), drawW, drawH);
+      } else {
+        ctx.fillStyle='#2e7d32';
+        ctx.fillRect(o.x,o.y,o.w,o.h);
+      }
     
       if (!o.passed && o.x + o.w < PLAYER_X) {
         o.passed = true;
@@ -1236,6 +1555,7 @@
         if(state.power.cdInvuln > 0) state.power.cdInvuln--;
         if(state.power.cdJump > 0) state.power.cdJump--;
         if(state.power.cdSlow > 0) state.power.cdSlow--;
+        if(state.power.cdLife > 0) state.power.cdLife--;
         const tNow = performance.now();
         if(tNow - state.lastPointAt > 80) {
           try { pointSound.currentTime = 0; } catch(_) {}
@@ -1280,15 +1600,21 @@
     
     world.obstacles = world.obstacles.filter(o=>o.x+o.w>-20);
 
-    // desenha sprite
-    {
-      const ch = CHARACTERS[currentCharacter];
-      const s = SHEETS[ch?.sheetId || 'sprite1'];
-      if(s?.spr?.ready && s?.img){
+    // desenha sprite (e calcula retângulo do player para colisão)
+    const ch = CHARACTERS[currentCharacter];
+    const s = SHEETS[ch?.sheetId || 'sprite1'];
+    const u = UNIT();
+    const pw = 4.2*u;
+    let sprW = pw*player.scale;
+    let sprH = sprW*0.8;
+    const baseY = player.y + pw;
+    const destX = PLAYER_X;
+    let destY = baseY - sprH;
+
+    if(s?.spr?.ready && s?.img){
       const SPR = s.spr;
-      const u=UNIT(); const pw=4.2*u; const sprW=pw*player.scale; const sprH=sprW*(SPR.h/SPR.w);
-      const baseY = player.y + pw;
-      const destX = PLAYER_X; const destY = baseY - sprH;
+      sprH = sprW*(SPR.h/SPR.w);
+      destY = baseY - sprH;
       const r = frameRectFor(currentCharacter, player.f);
       const nowFx = performance.now();
       const invOn = nowFx < state.power.invulnUntil;
@@ -1323,29 +1649,38 @@
       } else {
         ctx.drawImage(s.img, r.sx, r.sy, r.sw, r.sh, destX, destY, sprW, sprH);
       }
+    } else {
+      // Fallback: desenha retângulo simples se sprite não carregou
+      ctx.fillStyle = '#4a4a4a';
+      ctx.fillRect(destX, destY, sprW, sprH);
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(destX + sprW*0.7, destY + sprH*0.2, 4, 4);
+    }
 
-      // colisão (hitbox por alpha do 1º frame com margens)
-      const b = ch?.bounds || {ox:.12,oy:.10,ow:.7,oh:.65};
-      const hx = destX + sprW*b.ox, hy = destY + sprH*b.oy, hw = sprW*b.ow, hh = sprH*b.oh;
-      for(const o of world.obstacles){
-        const ob = o.bounds || {ox:0.1,oy:0.1,ow:0.6,oh:0.6};
-const ox = o.x + o.w * ob.ox, oy = o.y + o.h * ob.oy, ow = o.w * ob.ow, oh = o.h * ob.oh;
-if(hx < ox+ow && hx+hw > ox && hy < oy+oh && hy+hh > oy){
-          if(performance.now() < state.power.invulnUntil){
-          } else {
-            state.mode='characterSelect';
-            hud.style.display='none';
-            bgMusic.pause();
-            bgMusic.playing = false;
-            try { hitSound.currentTime = 0; } catch(_) {}
-            safePlay(hitSound);
-            try { introSound.currentTime = 0; } catch(_) {}
-            safePlay(introSound);
-            stopRainSfx();
-          }
+    // colisão: AABB simples (reduz 1 vida)
+    for(let i = world.obstacles.length - 1; i >= 0; i--){
+      const o = world.obstacles[i];
+      if(destX < o.x + o.w && destX + sprW > o.x && destY < o.y + o.h && destY + sprH > o.y){
+        if(performance.now() < state.power.invulnUntil) break;
+        state.lives = Math.max(0, state.lives - 1);
+        try { hitSound.currentTime = 0; } catch(_) {}
+        safePlay(hitSound);
+        world.obstacles.splice(i, 1);
+        if(state.lives <= 0){
+          state.mode='characterSelect';
+          hud.style.display='none';
+          bgMusic.pause();
+          bgMusic.playing = false;
+          try { introSound.currentTime = 0; } catch(_) {}
+          safePlay(introSound);
+          stopRainSfx();
         }
+        break;
       }
-      }
+    }
+
+    if(state.weather && state.weather.rain > 0) {
+      drawRainLayer(w, h, now, state.weather.rain, state.weather.type === 'storm', 1.0, 1.15, 1.1, 1.05);
     }
 
     // overlay de fase
@@ -1364,6 +1699,10 @@ if(hx < ox+ow && hx+hw > ox && hy < oy+oh && hy+hh > oy){
     }
 
     requestAnimationFrame(loop);
+    } catch (e) {
+      console.error('Erro no loop do jogo:', e);
+      requestAnimationFrame(loop);
+    }
   }
   
 
