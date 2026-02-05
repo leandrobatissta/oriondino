@@ -650,6 +650,60 @@
     ctx.restore();
   }
 
+  function drawGameHUD(w, h){
+    ctx.save();
+    const bestName = bestCharacterId && CHARACTERS[bestCharacterId] ? CHARACTERS[bestCharacterId].name : '';
+    const recFull = bestName ? `${bestCharacterScore} (${bestName})` : `${bestCharacterScore || 0}`;
+    const recShort = `${bestCharacterScore || 0}`;
+    let text = `SCORE ${state.score}   •   RECORD ${recFull}`;
+    const boxH = Math.max(34, Math.round(h*0.055));
+    const heartSize = Math.round(boxH*0.55);
+    const heartSpacing = Math.round(heartSize*1.1);
+    const heartsW = state.maxLives*heartSpacing;
+    const padX = Math.round(boxH*0.55);
+    const maxBoxW = w - 16;
+
+    let fontSize = Math.round(boxH*0.40);
+    const measure = () => {
+      ctx.font = `800 ${fontSize}px system-ui`;
+      return ctx.measureText(text).width;
+    };
+    let tw = measure();
+    while(fontSize > 9 && (tw + padX*3 + heartsW) > maxBoxW){
+      fontSize = Math.round(fontSize*0.92);
+      tw = measure();
+    }
+    if((tw + padX*3 + heartsW) > maxBoxW){
+      text = `SCORE ${state.score}   •   RECORD ${recShort}`;
+      fontSize = Math.max(9, Math.round(boxH*0.36));
+      tw = measure();
+      while(fontSize > 8 && (tw + padX*3 + heartsW) > maxBoxW){
+        fontSize = Math.round(fontSize*0.92);
+        tw = measure();
+      }
+    }
+
+    const boxW = Math.min(maxBoxW, Math.round(tw + padX*3 + heartsW));
+    const x = Math.round((w - boxW)/2);
+    const y = Math.round(h*0.02);
+    // sombra
+    ctx.fillStyle = 'rgba(0,0,0,0.35)';
+    ctx.fillRect(x, y + 3, boxW, boxH);
+    // pill
+    ctx.fillStyle = 'rgba(15, 23, 42, 0.82)';
+    ctx.fillRect(x, y, boxW, boxH);
+    ctx.strokeStyle = 'rgba(255,255,255,0.18)';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(x+1, y+1, boxW-2, boxH-2);
+    // texto
+    ctx.fillStyle = '#fff';
+    ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.fillText(text, x + boxW/2 - heartsW*0.52, y + boxH/2);
+    // corações
+    drawHearts(x + boxW - padX - heartsW, y + boxH/2, heartSize, heartSpacing);
+    ctx.restore();
+  }
+
   function drawRainLayer(w, h, now, intensity, isStorm, yMaxMul, alphaBoost, widthBoost, lenBoost){
     const rain = Math.max(0, Math.min(1, intensity || 0));
     const baseDrops = isStorm ? 380 : 280;
@@ -1418,61 +1472,7 @@
 
     drawSun(w, h, state.weather);
 
-    // HUD dentro do canvas (score/hi/record + vidas)
-    {
-      ctx.save();
-      const bestName = bestCharacterId && CHARACTERS[bestCharacterId] ? CHARACTERS[bestCharacterId].name : '';
-      const recFull = bestName ? `${bestCharacterScore} (${bestName})` : `${bestCharacterScore || 0}`;
-      const recShort = `${bestCharacterScore || 0}`;
-      let text = `SCORE ${state.score}   •   RECORD ${recFull}`;
-      const boxH = Math.max(34, Math.round(h*0.055));
-      const heartSize = Math.round(boxH*0.55);
-      const heartSpacing = Math.round(heartSize*1.1);
-      const heartsW = state.maxLives*heartSpacing;
-      const padX = Math.round(boxH*0.55);
-      const maxBoxW = w - 16;
-
-      // fonte adaptativa + texto compacto para telas estreitas
-      let fontSize = Math.round(boxH*0.40);
-      const measure = () => {
-        ctx.font = `800 ${fontSize}px system-ui`;
-        return ctx.measureText(text).width;
-      };
-      let tw = measure();
-      while(fontSize > 9 && (tw + padX*3 + heartsW) > maxBoxW){
-        fontSize = Math.round(fontSize*0.92);
-        tw = measure();
-      }
-      if((tw + padX*3 + heartsW) > maxBoxW){
-        text = `SCORE ${state.score}   •   RECORD ${recShort}`;
-        fontSize = Math.max(9, Math.round(boxH*0.36));
-        tw = measure();
-        while(fontSize > 8 && (tw + padX*3 + heartsW) > maxBoxW){
-          fontSize = Math.round(fontSize*0.92);
-          tw = measure();
-        }
-      }
-
-      const boxW = Math.min(maxBoxW, Math.round(tw + padX*3 + heartsW));
-      const x = Math.round((w - boxW)/2);
-      const y = Math.round(h*0.02);
-      // sombra
-      ctx.fillStyle = 'rgba(0,0,0,0.35)';
-      ctx.fillRect(x, y + 3, boxW, boxH);
-      // pill
-      ctx.fillStyle = 'rgba(15, 23, 42, 0.82)';
-      ctx.fillRect(x, y, boxW, boxH);
-      ctx.strokeStyle = 'rgba(255,255,255,0.18)';
-      ctx.lineWidth = 2;
-      ctx.strokeRect(x+1, y+1, boxW-2, boxH-2);
-      // texto
-      ctx.fillStyle = '#fff';
-      ctx.textAlign='center'; ctx.textBaseline='middle';
-      ctx.fillText(text, x + boxW/2 - heartsW*0.52, y + boxH/2);
-      // corações
-      drawHearts(x + boxW - padX - heartsW, y + boxH/2, heartSize, heartSpacing);
-      ctx.restore();
-    }
+    // HUD será desenhado no final (por cima da chuva)
 
     // relâmpago (temporal)
     if(state.weather && (state.weather.type === 'storm')) {
@@ -1733,6 +1733,8 @@
     if(state.weather && state.weather.rain > 0) {
       drawRainLayer(w, h, now, state.weather.rain, state.weather.type === 'storm', 1.0, 1.15, 1.1, 1.05);
     }
+
+    drawGameHUD(w, h);
 
     // overlay de fase
     if(state.phaseOverlay > 0) {
