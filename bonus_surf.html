@@ -6,7 +6,10 @@
 <title>Orion & Yasminn — Bônus Surf</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box;}
-body{background:#0ea5e9;overflow:hidden;font-family:system-ui;}
+body{background:#000;overflow:hidden;font-family:system-ui;}
+.wrap{display:grid;place-items:center;height:100%;gap:12px;padding:12px}
+.stack{position:relative;width:100%;max-width:900px}
+#game{width:100%;aspect-ratio:2/3;max-height:92vh;background:#000;border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,.35);display:block;touch-action:manipulation}
 canvas{
   display:block;
   image-rendering:pixelated;
@@ -16,33 +19,51 @@ canvas{
 </style>
 </head>
 <body>
-<canvas id="cvs"></canvas>
+<div class="wrap">
+  <div class="stack">
+    <canvas id="game"></canvas>
+  </div>
+</div>
 
 <script>
-const cvs = document.getElementById('cvs');
+const cvs = document.getElementById('game');
 
 /* 🔧 CORREÇÃO CRÍTICA: alpha PRECISA ser true */
 const ctx = cvs.getContext('2d');
 ctx.imageSmoothingEnabled = false;
 
+function fit(){
+  const dpr=Math.max(1,Math.min(window.devicePixelRatio||1,2));
+  const w=cvs.clientWidth,h=cvs.clientHeight;
+  cvs.width=Math.round(w*dpr); cvs.height=Math.round(h*dpr);
+  ctx.setTransform(dpr,0,0,dpr,0,0);
+}
+new ResizeObserver(fit).observe(cvs); fit();
+
 // ----- CONFIGURAÇÕES -----
 const GROUND_Y = 0.72;
-const WATER_Y  = 0.75; // subiu 3 pixels (0.78 → 0.75)
+const WATER_Y  = 0.75;
 const SURFER_Y = 0.75;
 const WAVE_SPEED = 0.12;
 const WAVE_AMPLITUDE = 12;
 const WAVE_PUSH_DIST = 0.12;
 
+// Constantes baseadas no jogo principal
+const UNIT = () => Math.max(6, Math.round(cvs.clientHeight/30));
+const GY = () => Math.round(cvs.clientHeight*0.80);
+let PLAYER_X = Math.round(cvs.clientWidth*0.35); // movido para 35% (mais para direita)
+new ResizeObserver(()=>{ PLAYER_X = Math.round(cvs.clientWidth*0.35); }).observe(cvs);
+
 // ----- SPRITES -----
 const SPRITE = new Image();
-SPRITE.src = './sprite5.png'; // 🔧 caminho explícito
+SPRITE.src = './sprite5.png';
 
 const OBSTACLE_SPRITE = new Image();
 OBSTACLE_SPRITE.src = './obstaculos.png';
 
 const SPR_COLS = 5;
 const SPR_ROWS = 4;
-const OBS_COLS = 1; // 3 obstáculos em coluna
+const OBS_COLS = 1;
 const OBS_ROWS = 3;
 
 function spriteCellSize(){
@@ -63,19 +84,25 @@ function obstacleCellSize(){
 const state = {
   mode: 'run',    // 'run' | 'surf'
   t: 0,
-  waveX: -0.5,
+  waveX: -0.5, // posição original (começa da esquerda)
   wavePhase: 0,
-  surferX: 0.05,
+  surferX: 0.05, // agora relativo ao mundo
   surferY: 0,
+  jumpY: 0, // altura do pulo
+  jumpVelocity: 0, // velocidade do pulo
+  isJumping: false, // se está pulando
+  jumpTilt: 0, // inclinação durante o pulo
   onWave: false,
   surfFrame: 0,
   runFrame: 0,
-  surfAnimDone: false, // controle se animação terminou
-  surfAltTime: 0, // controle para alternância automática
-  obstacles: [], // array de obstáculos
-  nextObstacleTime: 2, // próximo obstáculo em 2s
+  surfAnimDone: false,
+  surfAltTime: 0,
+  obstacles: [],
+  nextObstacleTime: 0, // criar imediatamente no início
   spriteLoaded: false,
-  obstacleSpriteLoaded: false
+  obstacleSpriteLoaded: false,
+  worldSpeed: UNIT() * 0.08, // velocidade do mundo
+  worldOffset: 0 // offset do mundo para movimento
 };
 
 SPRITE.onload = () => {
@@ -86,15 +113,34 @@ SPRITE.onload = () => {
 OBSTACLE_SPRITE.onload = () => {
   state.obstacleSpriteLoaded = true;
   console.log('obstaculos.png carregado');
+  
+  // Criar apenas 2 obstáculos iniciais espaçados
+  state.obstacles.push(createObstacle());
+  state.obstacles[0].x = 3.0; // primeiro obstáculo
+  
+  state.obstacles.push(createObstacle());
+  state.obstacles[1].x = 5.0; // segundo obstáculo mais à direita
 };
 
-// ----- CANVAS -----
-function resize(){
-  cvs.width = innerWidth;
-  cvs.height = innerHeight;
-}
-addEventListener('resize', resize);
-resize();
+// ----- CONTROLES DE PULO -----
+cvs.addEventListener('click', () => {
+  if(state.mode === 'surf' && !state.isJumping){
+    state.isJumping = true;
+    state.jumpVelocity = -1.2; // velocidade ajustada
+    state.jumpTilt = -0.2; // inclinação inicial para frente (negativo)
+    state.jumpY = 0.01; // começa um pouco acima
+  }
+});
+
+window.addEventListener('keydown', (e) => {
+  if(e.code === 'Space' && state.mode === 'surf' && !state.isJumping){
+    e.preventDefault();
+    state.isJumping = true;
+    state.jumpVelocity = -1.2; // velocidade ajustada
+    state.jumpTilt = -0.2; // inclinação inicial para frente (negativo)
+    state.jumpY = 0.01; // começa um pouco acima
+  }
+});
 
 // ----- UTILS -----
 const lerp = (a,b,t)=>a+(b-a)*t;
@@ -104,10 +150,10 @@ function createObstacle(){
   const types = [0, 1, 2]; // 3 tipos de obstáculos
   return {
     type: types[Math.floor(Math.random() * types.length)],
-    x: 1.2, // começa da direita
+    x: 3.0, // sempre fora da tela (direita)
     y: Math.random() * 0.1 - 0.05, // leve variação Y
     phase: Math.random() * Math.PI * 2, // fase inicial para movimento Y
-    speed: 0.08 + Math.random() * 0.04 // velocidade aleatória
+    speed: 0.15 // velocidade aumentada (mais rápido)
   };
 }
 
@@ -123,10 +169,13 @@ function drawObstacles(w,h){
     // movimento suave no eixo Y (aumentado)
     const yOffset = Math.sin(obs.phase) * 12; // mais movimento Y
     
+    // Converter coordenadas de mundo para tela (corrigido)
+    const screenX = (obs.x - state.surferX) * w + PLAYER_X;
+    
     ctx.drawImage(
       OBSTACLE_SPRITE,
       sx, sy, ow, oh - 3, // corta 3 pixels de baixo
-      w*obs.x,
+      screenX,
       h*WATER_Y - oh*0.05 + yOffset, // mais para baixo
       ow*0.25, oh*0.25  // tamanho normal
     );
@@ -160,9 +209,12 @@ function drawWave(w,h){
   const sx = frame*sw;
   const sy = row*sh;
 
-  // onda mais à esquerda (atrás da prancha), mas um pouco afastada
-  const dx = state.waveX*w - sw*0.15; // mais longe do surfista
-  const dy = h*WATER_Y + Math.sin(state.wavePhase)*WAVE_AMPLITUDE - sh*0.55; // mais para baixo
+  // Converter coordenadas de mundo para tela
+  const waveScreenX = (state.waveX - state.surferX) * w + PLAYER_X;
+
+  // onda mais à esquerda (atrás da prancha), com mais afastamento
+  const dx = waveScreenX - sw*0.30; // mais longe do surfista (aumentado de 0.25 para 0.30)
+  const dy = h*WATER_Y + Math.sin(state.wavePhase)*WAVE_AMPLITUDE - sh*0.57; // volta à posição original
 
   ctx.drawImage(
     SPRITE,
@@ -179,15 +231,16 @@ function drawRunner(w,h){
   let frame = Math.floor(state.runFrame) % SPR_COLS;
   // ignora o 1º frame da corrida (ruim)
   if(frame === 0) frame = 1;
-  const sx = frame*sw;
+  const sx = frame*sw + 3; // corta 3 pixels da esquerda
   const sy = 2*sh; // linha 3 (corrida)
 
+  // Surfista sempre na posição fixa do jogador
   ctx.drawImage(
     SPRITE,
-    sx + 3, sy, sw - 3, sh, // corta 3 pixels da esquerda
-    w*state.surferX,
+    sx, sy, sw - 3, sh, // remove 3 pixels de cada lado
+    PLAYER_X, // posição fixa do jogador
     h*GROUND_Y - sh*0.55,
-    sw*0.55, sh*0.55  // tamanho normal
+    sw*0.55, sh*0.55
   );
 }
 
@@ -196,80 +249,126 @@ function drawSurfer(w,h){
 
   const {sw,sh}=spriteCellSize();
   const frame = Math.floor(state.surfFrame) % SPR_COLS;
-  const sx = frame*sw;
+  const sx = frame*sw + 3; // corta 3 pixels da esquerda
   const sy = 3*sh; // linha 4 (subindo na prancha / surf)
 
-  // surfista um pouco mais à esquerda (onda passa atrás da prancha), mas um pouco afastado
-  const dx = w*state.surferX - sw*0.10;
-  const dy = h*SURFER_Y - sh*0.35 + state.surferY; // mais baixo, alinhado com onda
+  // Surfista sempre na posição fixa do jogador
+  const dx = PLAYER_X - sw*0.15; // voltado ao normal
+  const dy = h*SURFER_Y - sh*0.35 + state.surferY - (state.jumpY * h * 0.3); // altura do pulo
+
+  ctx.save();
+  
+  // Aplicar inclinação durante o pulo
+  if(state.isJumping){
+    ctx.translate(dx + sw*0.275, dy + sh*0.275); // centro do sprite
+    ctx.rotate(state.jumpTilt); // inclinação
+    ctx.translate(-(dx + sw*0.275), -(dy + sh*0.275));
+  }
 
   ctx.drawImage(
     SPRITE,
-    sx + 3, sy, sw - 3, sh, // corta 3 pixels da esquerda
+    sx, sy, sw - 3, sh, // remove 3 pixels de cada lado
     dx, dy,
-    sw*0.55, sh*0.55  // tamanho normal
+    sw*0.55, sh*0.55
   );
+  
+  ctx.restore();
 }
 
 // ----- UPDATE -----
 function update(dt){
   state.t+=dt;
 
-  // spawn de obstáculos durante o surf
-  if(state.mode === 'surf' && state.t >= state.nextObstacleTime){
-    state.obstacles.push(createObstacle());
-    state.nextObstacleTime = state.t + 2 + Math.random() * 2; // próximo em 2-4s
+  // spawn de obstáculos durante o surf - sempre vindo, máximo 2
+  if(state.mode === 'surf' && state.t >= state.nextObstacleTime && state.obstacles.length < 2){
+    const newObstacle = createObstacle();
+    newObstacle.x = 3.0 + Math.random() * 2.0; // sempre entre 3.0 e 5.0 (fora da tela)
+    state.obstacles.push(newObstacle);
+    state.nextObstacleTime = state.t + 8; // 8 segundos entre spawns (sempre vindo)
   }
 
-  // atualizar obstáculos
-  state.obstacles = state.obstacles.filter(obs => {
-    obs.x -= dt * obs.speed; // move da direita para esquerda
+  // atualizar obstáculos (movimento do mundo) - NUNCA REMOVER
+  state.obstacles.forEach(obs => {
+    obs.x -= dt * obs.speed; // move da direita para esquerda no mundo
     obs.phase += dt * 2; // movimento Y
-    return obs.x > -0.2; // remove se sair da tela
+    
+    // Se sair da tela, volta para o começo (sem reset)
+    if(obs.x < -2.0){
+      obs.x = 3.0 + Math.random() * 2.0; // volta para fora da tela
+    }
   });
 
   if(state.mode==='run'){
     state.runFrame+=dt*12;
-    // personagem corre devagar para a direita
+    if(state.runFrame >= 5) state.runFrame = 0; // reset de frame
+    
+    // Personagem se move no mundo, mas fica fixo na tela
     state.surferX = Math.min(0.35, state.surferX + dt*0.015);
-    // onda se aproxima
+    
+    // Onda se aproxima no mundo (lógica original)
     state.waveX+=dt*WAVE_SPEED;
     state.wavePhase+=dt*1.5;
 
-    // quando a onda encosta, já entra no surf
-    if(state.waveX >= (state.surferX - WAVE_PUSH_DIST)){
+    // Transição mais segura
+    const waveDistance = Math.abs(state.waveX - state.surferX);
+    if(waveDistance < 0.08){ // distância segura para transição
       state.mode='surf';
       state.onWave=true;
       state.surfFrame = 0;
       state.surfAnimDone = false;
+      state.surfAltTime = state.t;
+      console.log('Transição para surf mode - distância:', waveDistance.toFixed(3));
     }
   }
 
-  if(state.mode==='surf'){
+  if(state.mode === 'surf'){
     state.waveX+=dt*WAVE_SPEED;
-    if(state.waveX > 1.2) state.waveX = -0.4;
+    // REMOVIDO: reset da onda - agora continua infinitamente
     state.wavePhase+=dt*1.5;
+    
+    // Física do pulo com inclinação
+    if(state.isJumping){
+      state.jumpVelocity += 2.0 * dt; // gravidade
+      state.jumpY -= state.jumpVelocity * dt; // movimento vertical
+      
+      // Inclinação durante o pulo (frente = negativo)
+      if(state.jumpVelocity < 0){
+        state.jumpTilt = Math.max(-0.3, state.jumpTilt - dt * 3); // inclina mais para frente
+      } else {
+        state.jumpTilt = Math.min(0, state.jumpTilt + dt * 3); // volta inclinação para normal
+      }
+      
+      // Verificar se aterrissou
+      if(state.jumpY <= 0){
+        state.jumpY = 0;
+        state.jumpVelocity = 0;
+        state.isJumping = false;
+        state.jumpTilt = 0;
+      }
+    }
+    
+    // Onda empurra o surfista no mundo
+    state.surferX = lerp(state.surferX, state.waveX + WAVE_PUSH_DIST + 0.15, dt * 2);
+    state.surferY = Math.sin(state.wavePhase) * WAVE_AMPLITUDE;
 
-    // onda empurra o surfista, quase sobreposta (empurrão máximo)
-    state.surferX = lerp(state.surferX, state.waveX + WAVE_PUSH_DIST, dt*2);
-    state.surferY = Math.sin(state.wavePhase)*WAVE_AMPLITUDE;
-
-    // animação de surf automática pulando frames 1 e 2, depois intercala 3↔4
     if(!state.surfAnimDone){
-      state.surfFrame+=dt*3; // velocidade normal
+      state.surfFrame += dt * 3;
+      
+      // Lógica segura de frames
       if(state.surfFrame >= 1 && state.surfFrame < 3){
         state.surfFrame = 3; // pula para o frame 3
       }
       if(state.surfFrame >= 4){
         state.surfFrame = 4; // para no último quadro
         state.surfAnimDone = true;
-        state.surfAltTime = state.t; // marca início da alternância
+        state.surfAltTime = state.t;
+        console.log('Animação de surf concluída - frame final:', state.surfFrame);
       }
     } else {
       // intercala automaticamente entre frames 3 e 4 uma vez por segundo
       if(state.t - state.surfAltTime >= 1){
         state.surfFrame = state.surfFrame === 4 ? 3 : 4;
-        state.surfAltTime = state.t; // reseta tempo
+        state.surfAltTime = state.t;
       }
     }
   }
@@ -278,25 +377,27 @@ function update(dt){
 // ----- LOOP -----
 let last=performance.now();
 function loop(now){
-  const dt=(now-last)/1000;
-  last=now;
-
+  const dt=Math.min(0.032,(now-last)/1000); last=now;
+  
   update(dt);
 
-  drawSky(cvs.width,cvs.height);
-  drawBeach(cvs.width,cvs.height);
+  const w=cvs.clientWidth, h=cvs.clientHeight;
+
+  // fundo
+  drawSky(w,h);
+  drawBeach(w,h);
 
   // onda desenha em todos os modos (vem de trás)
-  drawWave(cvs.width,cvs.height);
+  drawWave(w,h);
 
   // obstáculos (atrás do surfista)
-  drawObstacles(cvs.width,cvs.height);
+  drawObstacles(w,h);
 
-  // personagem na frente
+  // personagem na frente (sempre fixo na tela)
   if(state.mode==='run'){
-    drawRunner(cvs.width,cvs.height);
+    drawRunner(w,h);
   } else {
-    drawSurfer(cvs.width,cvs.height);
+    drawSurfer(w,h);
   }
 
   // debug
@@ -305,8 +406,11 @@ function loop(now){
   ctx.fillText(state.mode.toUpperCase(),10,20);
   ctx.fillText(`runFrame=${Math.floor(state.runFrame)} surfFrame=${Math.floor(state.surfFrame)}`,10,40);
   ctx.fillText(`Obstáculos: ${state.obstacles.length}`,10,60);
+  ctx.fillText(`SurferX: ${state.surferX.toFixed(2)} WaveX: ${state.waveX.toFixed(2)}`,10,80);
+  ctx.fillText(`DT: ${dt.toFixed(4)}`,10,100);
   if(state.mode==='surf'){
-    ctx.fillText(state.onWave?'ON WAVE':'WAITING',10,80);
+    ctx.fillText(state.onWave?'ON WAVE':'WAITING',10,120);
+    ctx.fillText(`Jump: ${state.isJumping?'YES':'NO'} Y:${state.jumpY.toFixed(2)} Tilt:${state.jumpTilt.toFixed(2)}`,10,140);
   }
 
   requestAnimationFrame(loop);
