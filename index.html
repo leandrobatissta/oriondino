@@ -894,6 +894,7 @@
     state.power.cdJump = 0;
     state.power.cdSlow = 0;
     state.power.cdLife = 0;
+    state.power.cdSurf = 0;
     state.lives = state.maxLives;
     state.weather = pickWeather();
     state.lightning = 0;
@@ -1258,6 +1259,23 @@
       state.lives = Math.min(state.maxLives, state.lives + 1);
       state.power.cdLife = 20;
     }
+    if(id==='surf'){
+      // Salvar estado atual do jogo
+      state.savedGame = {
+        score: state.score,
+        lives: state.lives,
+        phase: state.phase,
+        character: state.currentCharacter,
+        weather: state.weather,
+        obstacles: [...world.obstacles],
+        worldSpeed: world.speed,
+        playerPos: { x: player.x, y: player.y, vy: player.vy, onGround: player.onGround }
+      };
+      
+      // Redirecionar para fase bonus surf
+      window.location.href = './bonus_surf.html';
+      return; // não continua para o modo play
+    }
     playUpgradeSfx(id);
     state.mode = 'play';
   }
@@ -1267,11 +1285,15 @@
       { id:'invuln', title:'Invencível', desc:'Sem dano por 5 segundos', disabled: state.power.cdInvuln > 0 },
       { id:'jump', title:'Pulo alto', desc:'Pulo + alto por 5 segundos', disabled: state.power.cdJump > 0 },
       { id:'slow', title:'Mais lento', desc:'Diminui a velocidade por 5 segundos', disabled: state.power.cdSlow > 0 },
-      { id:'life', title:'Ganhar vida', desc:'+1 coração (máx 3)', disabled: state.power.cdLife > 0 || state.lives >= state.maxLives }
+      { id:'life', title:'Ganhar vida', desc:'+1 coração (máx 3)', disabled: state.power.cdLife > 0 || state.lives >= state.maxLives },
+      { id:'surf', title:'Talvez Surf?', desc:'Fase bonus na praia!', disabled: state.power.cdSurf > 0 }
     ];
-    // Sorteia 3 das 4 opções, com menor chance de incluir 'life'
+    // Sorteia 3 das 5 opções, com menor chance de incluir 'life'
     const includeLife = Math.random() < 0.25; // 25% de chance de incluir vida
-    const filtered = includeLife ? allOpts : allOpts.filter(o => o.id !== 'life');
+    const includeSurf = Math.random() < 0.3; // 30% de chance de incluir surf
+    let filtered = allOpts;
+    if(!includeLife) filtered = filtered.filter(o => o.id !== 'life');
+    if(!includeSurf) filtered = filtered.filter(o => o.id !== 'surf');
     const shuffled = filtered.sort(() => Math.random() - 0.5);
     const opts = shuffled.slice(0, 3);
     state.upgradeOptions = opts;
@@ -1338,7 +1360,7 @@
       if(o.disabled){
         ctx.font = `${Math.round(cardH*0.12)}px system-ui`;
         ctx.fillStyle = 'rgba(255,255,255,0.32)';
-        const cd = o.id==='invuln' ? state.power.cdInvuln : (o.id==='jump' ? state.power.cdJump : (o.id==='slow' ? state.power.cdSlow : state.power.cdLife));
+        const cd = o.id==='invuln' ? state.power.cdInvuln : (o.id==='jump' ? state.power.cdJump : (o.id==='slow' ? state.power.cdSlow : (o.id==='life' ? state.power.cdLife : state.power.cdSurf)));
         ctx.fillText(`Disponível em ${cd}`, cx+cardW/2, cy+cardH*0.82);
       } else {
         ctx.font = `${Math.round(cardH*0.12)}px system-ui`;
@@ -1607,6 +1629,7 @@
         if(state.power.cdJump > 0) state.power.cdJump--;
         if(state.power.cdSlow > 0) state.power.cdSlow--;
         if(state.power.cdLife > 0) state.power.cdLife--;
+        if(state.power.cdSurf > 0) state.power.cdSurf--;
         const tNow = performance.now();
         if(tNow - state.lastPointAt > 80) {
           try { pointSound.currentTime = 0; } catch(_) {}

@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+<title>Retorno ao Jogo</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;}
+body{background:#000;overflow:hidden;font-family:system-ui;display:grid;place-items:center;height:100%;}
+.wrap{display:grid;place-items:center;height:100%;gap:12px;padding:12px}
+.stack{position:relative;width:100%;max-width:900px}
+#game{width:100%;aspect-ratio:2/3;max-height:92vh;background:#000;border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,.35);display:block;touch-action:manipulation}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="stack">
+    <canvas id="game"></canvas>
+  </div>
+</div>
+
+<script>
+const cvs = document.getElementById('game');
+const ctx = cvs.getContext('2d');
+ctx.imageSmoothingEnabled = false;
+
+function fit(){
+  const dpr=Math.max(1,Math.min(window.devicePixelRatio||1,2));
+  const w=cvs.clientWidth,h=cvs.clientHeight;
+  cvs.width=Math.round(w*dpr); cvs.height=Math.round(h*dpr);
+  ctx.setTransform(dpr,0,0,dpr,0,0);
+}
+new ResizeObserver(fit).observe(cvs); fit();
+
+// Estado do jogo salvo
+let savedState = null;
+
+// Carregar estado salvo do localStorage
+try {
+  savedState = JSON.parse(localStorage.getItem('surf_bonus_return') || '{}');
+} catch(e) {
+  console.log('Nenhum estado salvo encontrado');
+}
+
+// Se não tiver estado salvo, voltar imediatamente
+if(!savedState || !savedState.character) {
+  window.location.href = './index.html';
+}
+
+// Desenhar tela de carregamento
+function drawLoadingScreen() {
+  const w = cvs.clientWidth, h = cvs.clientHeight;
+  
+  // Fundo de praia
+  const g = ctx.createLinearGradient(0,0,0,h);
+  g.addColorStop(0,'#87CEEB');
+  g.addColorStop(1,'#F0E68C');
+  ctx.fillStyle=g;
+  ctx.fillRect(0,0,w,h);
+  
+  // Sol
+  ctx.save();
+  ctx.globalAlpha = 0.9;
+  ctx.fillStyle = '#FFD700';
+  ctx.beginPath(); ctx.arc(w*0.85, h*0.15, Math.min(56, Math.min(w,h)*0.12), 0, Math.PI*2); ctx.fill();
+  ctx.globalAlpha = 0.3;
+  ctx.fillStyle = '#FFED4E';
+  ctx.beginPath(); ctx.arc(w*0.85, h*0.15, Math.min(56, Math.min(w,h)*0.12)*1.4, 0, Math.PI*2); ctx.fill();
+  ctx.restore();
+  
+  // Mensagem
+  ctx.fillStyle = '#fff';
+  ctx.font = 'bold 24px system-ui';
+  ctx.textAlign = 'center';
+  ctx.fillText('Retornando ao jogo...', w/2, h/2);
+  
+  ctx.font = '16px system-ui';
+  ctx.fillText(`Score: ${savedState.score || 0} | Vidas: ${savedState.lives || 3}`, w/2, h/2 + 40);
+}
+
+// Desenhar tela inicial
+drawLoadingScreen();
+
+// Redirecionar após breve delay
+setTimeout(() => {
+  // Restaurar estado no localStorage para o jogo principal
+  localStorage.setItem('surf_bonus_return', JSON.stringify(savedState));
+  window.location.href = './index.html';
+}, 2000);
+
+</script>
+</body>
+</html>

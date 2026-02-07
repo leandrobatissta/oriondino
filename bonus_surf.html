@@ -25,6 +25,14 @@ canvas{
   </div>
 </div>
 
+<!-- Áudios do jogo principal -->
+<audio id="introSound" src="assets/intro.mp3" preload="auto"></audio>
+<audio id="bgMusic" src="assets/bg_music.mp3" preload="auto" loop></audio>
+<audio id="jumpSound" src="assets/jump.mp3" preload="auto"></audio>
+<audio id="hitSound" src="assets/hit.mp3" preload="auto"></audio>
+<audio id="pointSound" src="assets/point.mp3" preload="auto"></audio>
+<audio id="phaseSound" src="assets/phase_up.mp3" preload="auto"></audio>
+
 <script>
 const cvs = document.getElementById('game');
 
@@ -48,18 +56,66 @@ const WAVE_SPEED = 0.12;
 const WAVE_AMPLITUDE = 12;
 const WAVE_PUSH_DIST = 0.12;
 
+// Posição do jogador ajustada para mobile
+function updatePlayerPosition(){
+  const w = cvs.clientWidth;
+  if(w < 600){
+    PLAYER_X = Math.round(w*0.20); // mais à esquerda em mobile
+  } else if(w < 800){
+    PLAYER_X = Math.round(w*0.25); // intermediário
+  } else {
+    PLAYER_X = Math.round(w*0.35); // posição normal em desktop
+  }
+}
+
+let PLAYER_X = Math.round(cvs.clientWidth*0.35);
+new ResizeObserver(()=>{ 
+  updatePlayerPosition(); 
+}).observe(cvs);
+
 // Constantes baseadas no jogo principal
 const UNIT = () => Math.max(6, Math.round(cvs.clientHeight/30));
 const GY = () => Math.round(cvs.clientHeight*0.80);
-let PLAYER_X = Math.round(cvs.clientWidth*0.35); // movido para 35% (mais para direita)
-new ResizeObserver(()=>{ PLAYER_X = Math.round(cvs.clientWidth*0.35); }).observe(cvs);
 
 // ----- SPRITES -----
-const SPRITE = new Image();
-SPRITE.src = './sprite5.png';
+const SPRITE_FILES = [
+  './sprite3.png',
+  './sprite4.png', 
+  './sprite5.png'
+];
+
+let currentSpriteIndex = 0;
+let SPRITE = new Image();
+SPRITE.src = SPRITE_FILES[currentSpriteIndex];
+
+function changeRandomSprite() {
+  currentSpriteIndex = Math.floor(Math.random() * SPRITE_FILES.length);
+  SPRITE.src = SPRITE_FILES[currentSpriteIndex];
+  console.log('Mudando para sprite:', SPRITE_FILES[currentSpriteIndex]);
+}
+
+// Carregar sprite inicial
+SPRITE.onload = () => {
+  state.spriteLoaded = true;
+  console.log('Sprite carregado:', SPRITE_FILES[currentSpriteIndex]);
+};
 
 const OBSTACLE_SPRITE = new Image();
 OBSTACLE_SPRITE.src = './obstaculos.png';
+
+// ----- ÁUDIOS -----
+const introSound = document.getElementById('introSound');
+const bgMusic = document.getElementById('bgMusic');
+const jumpSound = document.getElementById('jumpSound');
+const hitSound = document.getElementById('hitSound');
+const pointSound = document.getElementById('pointSound');
+const phaseSound = document.getElementById('phaseSound');
+
+function safePlay(el){
+  if(!el) return;
+  try { el.currentTime = 0; } catch(_) {}
+  el.play().catch(_=>{});
+}
 
 const SPR_COLS = 5;
 const SPR_ROWS = 4;
@@ -102,7 +158,20 @@ const state = {
   spriteLoaded: false,
   obstacleSpriteLoaded: false,
   worldSpeed: UNIT() * 0.08, // velocidade do mundo
-  worldOffset: 0 // offset do mundo para movimento
+  worldOffset: 0, // offset do mundo para movimento
+  
+  // Fases do jogo principal
+  score: 0,
+  phase: 0,
+  phaseOverlay: 0,
+  lastPointAt: 0,
+  nextPhaseAt: 10,
+  
+  // Estado do jogo principal salvo
+  savedGame: null,
+  gameOver: false,
+  lives: 3, // vidas para o HUD
+  maxLives: 3
 };
 
 SPRITE.onload = () => {
@@ -114,31 +183,55 @@ OBSTACLE_SPRITE.onload = () => {
   state.obstacleSpriteLoaded = true;
   console.log('obstaculos.png carregado');
   
-  // Criar apenas 2 obstáculos iniciais espaçados
+  // Carregar estado salvo do jogo principal
+  try {
+    const saved = JSON.parse(localStorage.getItem('surf_bonus_return') || '{}');
+    if(saved && saved.character) {
+      state.savedGame = saved;
+      state.score = saved.score || 0;
+      state.lives = saved.lives || 3;
+      state.maxLives = saved.maxLives || 3;
+      console.log('Estado do jogo principal carregado');
+    }
+  } catch(e) {
+    console.log('Nenhum estado salvo encontrado');
+  }
+  
+  // Sortear sprite inicial
+  changeRandomSprite();
+  
+  // Criar 2 obstáculos iniciais como antes
   state.obstacles.push(createObstacle());
   state.obstacles[0].x = 3.0; // primeiro obstáculo
+  state.obstacles[0].speed = 0.15; // velocidade base
   
   state.obstacles.push(createObstacle());
   state.obstacles[1].x = 5.0; // segundo obstáculo mais à direita
+  state.obstacles[1].speed = 0.15; // mesma velocidade base
+  
+  // Iniciar música de fundo
+  safePlay(bgMusic);
 };
 
 // ----- CONTROLES DE PULO -----
-cvs.addEventListener('click', () => {
-  if(state.mode === 'surf' && !state.isJumping){
+cvs.addEventListener('click', (e) => {
+  if(state.mode === 'surf' && !state.isJumping && !state.gameOver){
     state.isJumping = true;
     state.jumpVelocity = -1.2; // velocidade ajustada
     state.jumpTilt = -0.2; // inclinação inicial para frente (negativo)
     state.jumpY = 0.01; // começa um pouco acima
+    safePlay(jumpSound); // som do pulo
   }
 });
 
 window.addEventListener('keydown', (e) => {
-  if(e.code === 'Space' && state.mode === 'surf' && !state.isJumping){
+  if(e.code === 'Space' && state.mode === 'surf' && !state.isJumping && !state.gameOver){
     e.preventDefault();
     state.isJumping = true;
     state.jumpVelocity = -1.2; // velocidade ajustada
     state.jumpTilt = -0.2; // inclinação inicial para frente (negativo)
     state.jumpY = 0.01; // começa um pouco acima
+    safePlay(jumpSound); // som do pulo
   }
 });
 
@@ -153,7 +246,8 @@ function createObstacle(){
     x: 3.0, // sempre fora da tela (direita)
     y: Math.random() * 0.1 - 0.05, // leve variação Y
     phase: Math.random() * Math.PI * 2, // fase inicial para movimento Y
-    speed: 0.15 // velocidade aumentada (mais rápido)
+    speed: 0.15, // velocidade base (será ajustada no spawn)
+    passed: false // para controle de pontos
   };
 }
 
@@ -198,6 +292,22 @@ function drawBeach(w,h){
   ctx.fillRect(0,h*WATER_Y,w,h);
 }
 
+function drawSun(w,h){
+  // Sol mais próximo ao personagem
+  const sunX = w < 600 ? w*0.65 : w*0.75; // mais próximo do personagem
+  const sunY = w < 600 ? h*0.10 : h*0.12; // mais alto em telas pequenas
+  const sunR = w < 600 ? Math.min(35, Math.min(w,h)*0.07) : Math.min(48, Math.min(w,h)*0.10); // menor em mobile
+  
+  ctx.save();
+  ctx.globalAlpha = 0.9;
+  ctx.fillStyle = '#ffd700';
+  ctx.beginPath(); ctx.arc(sunX, sunY, sunR, 0, Math.PI*2); ctx.fill();
+  ctx.globalAlpha = 0.3;
+  ctx.fillStyle = '#ffed4e';
+  ctx.beginPath(); ctx.arc(sunX, sunY, sunR*1.4, 0, Math.PI*2); ctx.fill();
+  ctx.restore();
+}
+
 function drawWave(w,h){
   if(!state.spriteLoaded) return;
 
@@ -234,13 +344,19 @@ function drawRunner(w,h){
   const sx = frame*sw + 3; // corta 3 pixels da esquerda
   const sy = 2*sh; // linha 3 (corrida)
 
-  // Surfista sempre na posição fixa do jogador
+  // Ajustar tamanho do personagem para mobile
+  const isMobile = w < 600;
+  const scale = isMobile ? 0.7 : 0.55; // maior em mobile
+
+  // Corredor sempre na posição fixa do jogador
+  const dx = PLAYER_X - sw*0.15;
+  const dy = h*GROUND_Y - sh*0.35;
+
   ctx.drawImage(
     SPRITE,
     sx, sy, sw - 3, sh, // remove 3 pixels de cada lado
-    PLAYER_X, // posição fixa do jogador
-    h*GROUND_Y - sh*0.55,
-    sw*0.55, sh*0.55
+    dx, dy,
+    sw*scale, sh*scale // tamanho ajustado
   );
 }
 
@@ -252,9 +368,13 @@ function drawSurfer(w,h){
   const sx = frame*sw + 3; // corta 3 pixels da esquerda
   const sy = 3*sh; // linha 4 (subindo na prancha / surf)
 
+  // Ajustar tamanho do personagem para mobile
+  const isMobile = w < 600;
+  const scale = isMobile ? 0.7 : 0.55; // maior em mobile
+  
   // Surfista sempre na posição fixa do jogador
-  const dx = PLAYER_X - sw*0.15; // voltado ao normal
-  const dy = h*SURFER_Y - sh*0.35 + state.surferY - (state.jumpY * h * 0.3); // altura do pulo
+  const dx = PLAYER_X - sw*0.15;
+  const dy = h*SURFER_Y - sh*0.35 + state.surferY - (state.jumpY * h * 0.3);
 
   ctx.save();
   
@@ -269,7 +389,7 @@ function drawSurfer(w,h){
     SPRITE,
     sx, sy, sw - 3, sh, // remove 3 pixels de cada lado
     dx, dy,
-    sw*0.55, sh*0.55
+    sw*scale, sh*scale // tamanho ajustado
   );
   
   ctx.restore();
@@ -279,12 +399,17 @@ function drawSurfer(w,h){
 function update(dt){
   state.t+=dt;
 
-  // spawn de obstáculos durante o surf - sempre vindo, máximo 2
-  if(state.mode === 'surf' && state.t >= state.nextObstacleTime && state.obstacles.length < 2){
+  // spawn de obstáculos durante o surf - sem limite, velocidade progressiva
+  if(state.mode === 'surf' && state.t >= state.nextObstacleTime){
     const newObstacle = createObstacle();
     newObstacle.x = 3.0 + Math.random() * 2.0; // sempre entre 3.0 e 5.0 (fora da tela)
+    
+    // Aumentar velocidade baseada na quantidade de obstáculos existentes
+    const speedIncrease = state.obstacles.length * 0.02; // 0.02 por obstáculo
+    newObstacle.speed = 0.15 + speedIncrease;
+    
     state.obstacles.push(newObstacle);
-    state.nextObstacleTime = state.t + 8; // 8 segundos entre spawns (sempre vindo)
+    state.nextObstacleTime = state.t + 3; // 3 segundos entre spawns (mais rápido)
   }
 
   // atualizar obstáculos (movimento do mundo) - NUNCA REMOVER
@@ -292,9 +417,99 @@ function update(dt){
     obs.x -= dt * obs.speed; // move da direita para esquerda no mundo
     obs.phase += dt * 2; // movimento Y
     
+    // Verificar colisão com o surfista - MELHORADA
+    if(state.mode === 'surf' && !state.gameOver) {
+      const obsScreenX = (obs.x - state.surferX) * cvs.clientWidth + PLAYER_X;
+      const obsY = cvs.clientHeight*WATER_Y - 32*0.05 + Math.sin(obs.phase) * 12;
+      
+      const surferX = PLAYER_X;
+      const surferY = cvs.clientHeight*SURFER_Y - 32*0.35 + state.surferY - (state.jumpY * cvs.clientHeight * 0.3);
+      
+      // Hitbox mais precisa
+      const surferHitbox = {
+        x: surferX + 5,
+        y: surferY + 5,
+        w: 22,
+        h: 22
+      };
+      
+      const obsHitbox = {
+        x: obsScreenX + 4,
+        y: obsY + 4,
+        w: 24,
+        h: 24
+      };
+      
+      // Verificar colisão
+      if(obsHitbox.x < surferHitbox.x + surferHitbox.w &&
+         obsHitbox.x + obsHitbox.w > surferHitbox.x &&
+         obsHitbox.y < surferHitbox.y + surferHitbox.h &&
+         obsHitbox.y + obsHitbox.h > surferHitbox.y) {
+        
+        // Perder uma vida
+        state.lives--;
+        safePlay(hitSound);
+        
+        if(state.lives <= 0) {
+          // Game over!
+          state.gameOver = true;
+          
+          // Salvar estado final
+          const finalState = {
+            ...state.savedGame,
+            score: state.score,
+            lives: 0,
+            bonusSurfCompleted: false
+          };
+          
+          // Salvar e redirecionar
+          localStorage.setItem('surf_bonus_return', JSON.stringify(finalState));
+          
+          setTimeout(() => {
+            window.location.href = './return_from_surf.html';
+          }, 1000);
+          return;
+        } else {
+          // Resetar obstáculo que colidiu
+          obs.x = 3.0 + Math.random() * 2.0;
+          obs.passed = false;
+        }
+      }
+    }
+    
+    // Verificar se passou pelo jogador (ponto)
+    if(!obs.passed && obs.x < state.surferX){
+      obs.passed = true;
+      state.score++;
+      
+      // Som de ponto
+      const tNow = performance.now();
+      if(tNow - state.lastPointAt > 80) {
+        safePlay(pointSound);
+        state.lastPointAt = tNow;
+      }
+      
+      // Verificar próxima fase
+      if(state.score >= state.nextPhaseAt) {
+        state.phase = Math.min(5, state.phase + 1); // máximo 5 fases
+        state.phaseOverlay = 4.4;
+        state.nextPhaseAt += 10;
+        safePlay(phaseSound);
+        
+        // Mudar sprite aleatoriamente a cada fase
+        changeRandomSprite();
+        
+        // Aumentar velocidade dos obstáculos com a fase
+        state.obstacles.forEach(o => {
+          o.speed = 0.15 + (state.phase * 0.02); // aumenta 0.02 por fase
+        });
+      }
+    }
+    
     // Se sair da tela, volta para o começo (sem reset)
     if(obs.x < -2.0){
       obs.x = 3.0 + Math.random() * 2.0; // volta para fora da tela
+      obs.passed = false; // reset para poder pontuar novamente
     }
   });
 
@@ -385,6 +600,7 @@ function loop(now){
 
   // fundo
   drawSky(w,h);
+  drawSun(w,h); // sol do jogo principal
   drawBeach(w,h);
 
   // onda desenha em todos os modos (vem de trás)
@@ -404,13 +620,87 @@ function loop(now){
   ctx.fillStyle='#fff';
   ctx.font='14px system-ui';
   ctx.fillText(state.mode.toUpperCase(),10,20);
-  ctx.fillText(`runFrame=${Math.floor(state.runFrame)} surfFrame=${Math.floor(state.surfFrame)}`,10,40);
+  ctx.fillText(`Score: ${state.score} | Fase: ${state.phase}`,10,40);
   ctx.fillText(`Obstáculos: ${state.obstacles.length}`,10,60);
-  ctx.fillText(`SurferX: ${state.surferX.toFixed(2)} WaveX: ${state.waveX.toFixed(2)}`,10,80);
-  ctx.fillText(`DT: ${dt.toFixed(4)}`,10,100);
+  
+  // Mostrar velocidades dos obstáculos
+  if(state.obstacles.length > 0){
+    const speeds = state.obstacles.map((o,i) => `O${i+1}:${o.speed.toFixed(3)}`).join(' ');
+    ctx.fillText(`Velocidades: ${speeds}`,10,80);
+  }
+  
+  ctx.fillText(`SurferX: ${state.surferX.toFixed(2)} WaveX: ${state.waveX.toFixed(2)}`,10,100);
+  ctx.fillText(`DT: ${dt.toFixed(4)}`,10,120);
   if(state.mode==='surf'){
-    ctx.fillText(state.onWave?'ON WAVE':'WAITING',10,120);
-    ctx.fillText(`Jump: ${state.isJumping?'YES':'NO'} Y:${state.jumpY.toFixed(2)} Tilt:${state.jumpTilt.toFixed(2)}`,10,140);
+    ctx.fillText(state.onWave?'ON WAVE':'WAITING',10,140);
+    ctx.fillText(`Jump: ${state.isJumping?'YES':'NO'} Y:${state.jumpY.toFixed(2)} Tilt:${state.jumpTilt.toFixed(2)}`,10,160);
+  }
+  
+  // HUD de vidas
+  ctx.fillStyle = '#fff';
+  ctx.font = '16px system-ui';
+  ctx.textAlign = 'left';
+  ctx.fillText('Vidas: ', w - 150, 30);
+  
+  // Desenhar corações
+  for(let i = 0; i < state.maxLives; i++){
+    const x = w - 80 + i * 25;
+    const y = 20;
+    
+    if(i < state.lives){
+      // Coração cheio
+      ctx.fillStyle = '#ff4444';
+      ctx.beginPath();
+      ctx.moveTo(x + 8, y + 6);
+      ctx.bezierCurveTo(x + 8, y + 2, x + 4, y + 2, x + 4, y + 6);
+      ctx.bezierCurveTo(x + 4, y + 10, x + 8, y + 14, x + 12, y + 14);
+      ctx.bezierCurveTo(x + 16, y + 14, x + 20, y + 10, x + 20, y + 6);
+      ctx.bezierCurveTo(x + 20, y + 2, x + 16, y + 2, x + 12, y + 6);
+      ctx.bezierCurveTo(x + 10, y + 8, x + 8, y + 6, x + 8, y + 6);
+      ctx.fill();
+    } else {
+      // Coração vazio
+      ctx.strokeStyle = '#ff4444';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(x + 8, y + 6);
+      ctx.bezierCurveTo(x + 8, y + 2, x + 4, y + 2, x + 4, y + 6);
+      ctx.bezierCurveTo(x + 4, y + 10, x + 8, y + 14, x + 12, y + 14);
+      ctx.bezierCurveTo(x + 16, y + 14, x + 20, y + 10, x + 20, y + 6);
+      ctx.bezierCurveTo(x + 20, y + 2, x + 16, y + 2, x + 12, y + 6);
+      ctx.bezierCurveTo(x + 10, y + 8, x + 8, y + 6, x + 8, y + 6);
+      ctx.stroke();
+    }
+  }
+  
+  // Overlay de game over
+  if(state.gameOver){
+    ctx.save();
+    ctx.fillStyle = 'rgba(0,0,0,0.8)';
+    ctx.fillRect(0,0,w,h);
+    ctx.fillStyle = '#fff';
+    ctx.font = 'bold 48px system-ui';
+    ctx.textAlign = 'center';
+    ctx.fillText('GAME OVER', w/2, h/2);
+    ctx.font = '24px system-ui';
+    ctx.fillText(`Score Final: ${state.score}`, w/2, h/2 + 60);
+    ctx.restore();
+  }
+  
+  // Overlay de fase
+  if(state.phaseOverlay > 0){
+    ctx.save();
+    ctx.globalAlpha = Math.min(1, state.phaseOverlay);
+    ctx.fillStyle = '#fff';
+    
+    // Ajustar tamanho da fonte para mobile
+    const isMobile = w < 600;
+    const fontSize = isMobile ? '32px' : '48px';
+    ctx.font = `bold ${fontSize} system-ui`;
+    ctx.textAlign = 'center';
+    ctx.fillText(`FASE ${state.phase + 1}`, w/2, h/2);
+    ctx.restore();
+    state.phaseOverlay -= dt;
   }
 
   requestAnimationFrame(loop);
