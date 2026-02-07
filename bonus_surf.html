@@ -256,22 +256,20 @@ function drawObstacles(w,h){
   
   const {ow,oh} = obstacleCellSize();
   
+  // Ajustar tamanho dos obstáculos para mobile
+  const isMobile = w < 600;
+  const obstacleScale = isMobile ? 0.6 : 1.0; // muito menor em mobile
+  
   state.obstacles.forEach(obs => {
-    const sx = 0; // só uma coluna
-    const sy = obs.type * oh;
-    
-    // movimento suave no eixo Y (aumentado)
-    const yOffset = Math.sin(obs.phase) * 12; // mais movimento Y
-    
-    // Converter coordenadas de mundo para tela (corrigido)
-    const screenX = (obs.x - state.surferX) * w + PLAYER_X;
+    // Converter coordenadas do mundo para tela
+    const screenX = (obs.x - state.surferX) * cvs.clientWidth + PLAYER_X;
+    const yOffset = Math.sin(obs.phase) * 12; // movimento Y da onda
     
     ctx.drawImage(
       OBSTACLE_SPRITE,
-      sx, sy, ow, oh - 3, // corta 3 pixels de baixo
-      screenX,
-      h*WATER_Y - oh*0.05 + yOffset, // mais para baixo
-      ow*0.25, oh*0.25  // tamanho normal
+      obs.type * ow, 0, ow, oh,
+      screenX, h*WATER_Y - oh*0.05 + yOffset,
+      ow*obstacleScale, oh*obstacleScale // tamanho ajustado
     );
   });
 }
@@ -293,10 +291,10 @@ function drawBeach(w,h){
 }
 
 function drawSun(w,h){
-  // Sol mais próximo ao personagem
+  // Sol mais próximo ao personagem e menor em mobile
   const sunX = w < 600 ? w*0.65 : w*0.75; // mais próximo do personagem
   const sunY = w < 600 ? h*0.10 : h*0.12; // mais alto em telas pequenas
-  const sunR = w < 600 ? Math.min(35, Math.min(w,h)*0.07) : Math.min(48, Math.min(w,h)*0.10); // menor em mobile
+  const sunR = w < 600 ? Math.min(25, Math.min(w,h)*0.05) : Math.min(48, Math.min(w,h)*0.10); // bem menor em mobile
   
   ctx.save();
   ctx.globalAlpha = 0.9;
@@ -368,9 +366,9 @@ function drawSurfer(w,h){
   const sx = frame*sw + 3; // corta 3 pixels da esquerda
   const sy = 3*sh; // linha 4 (subindo na prancha / surf)
 
-  // Ajustar tamanho do personagem para mobile
+  // Ajustar tamanho do personagem para mobile - muito menor agora
   const isMobile = w < 600;
-  const scale = isMobile ? 0.7 : 0.55; // maior em mobile
+  const scale = isMobile ? 0.45 : 0.55; // bem menor em mobile
   
   // Surfista sempre na posição fixa do jogador
   const dx = PLAYER_X - sw*0.15;
@@ -425,19 +423,23 @@ function update(dt){
       const surferX = PLAYER_X;
       const surferY = cvs.clientHeight*SURFER_Y - 32*0.35 + state.surferY - (state.jumpY * cvs.clientHeight * 0.3);
       
+      // Ajustar hitbox para mobile
+      const isMobile = cvs.clientWidth < 600;
+      const hitboxScale = isMobile ? 0.6 : 1.0;
+      
       // Hitbox mais precisa
       const surferHitbox = {
         x: surferX + 5,
         y: surferY + 5,
-        w: 22,
-        h: 22
+        w: 22 * hitboxScale,
+        h: 22 * hitboxScale
       };
       
       const obsHitbox = {
         x: obsScreenX + 4,
         y: obsY + 4,
-        w: 24,
-        h: 24
+        w: 24 * hitboxScale,
+        h: 24 * hitboxScale
       };
       
       // Verificar colisão
@@ -616,86 +618,70 @@ function loop(now){
     drawSurfer(w,h);
   }
 
-  // debug
-  ctx.fillStyle='#fff';
-  ctx.font='14px system-ui';
-  ctx.fillText(state.mode.toUpperCase(),10,20);
-  ctx.fillText(`Score: ${state.score} | Fase: ${state.phase}`,10,40);
-  ctx.fillText(`Obstáculos: ${state.obstacles.length}`,10,60);
+  // debug removido para mobile
   
-  // Mostrar velocidades dos obstáculos
-  if(state.obstacles.length > 0){
-    const speeds = state.obstacles.map((o,i) => `O${i+1}:${o.speed.toFixed(3)}`).join(' ');
-    ctx.fillText(`Velocidades: ${speeds}`,10,80);
-  }
-  
-  ctx.fillText(`SurferX: ${state.surferX.toFixed(2)} WaveX: ${state.waveX.toFixed(2)}`,10,100);
-  ctx.fillText(`DT: ${dt.toFixed(4)}`,10,120);
-  if(state.mode==='surf'){
-    ctx.fillText(state.onWave?'ON WAVE':'WAITING',10,140);
-    ctx.fillText(`Jump: ${state.isJumping?'YES':'NO'} Y:${state.jumpY.toFixed(2)} Tilt:${state.jumpTilt.toFixed(2)}`,10,160);
-  }
-  
-  // HUD de vidas
+  // HUD de vidas - ajustado para mobile
+  const isMobile = w < 600;
   ctx.fillStyle = '#fff';
-  ctx.font = '16px system-ui';
+  ctx.font = isMobile ? '12px system-ui' : '16px system-ui';
   ctx.textAlign = 'left';
-  ctx.fillText('Vidas: ', w - 150, 30);
+  ctx.fillText('Vidas: ', w - (isMobile ? 120 : 150), isMobile ? 25 : 30);
   
-  // Desenhar corações
+  // Desenhar corações - menores em mobile
+  const heartSize = isMobile ? 15 : 25;
+  const heartSpacing = isMobile ? 18 : 25;
   for(let i = 0; i < state.maxLives; i++){
-    const x = w - 80 + i * 25;
-    const y = 20;
+    const x = w - (isMobile ? 60 : 80) + i * heartSpacing;
+    const y = isMobile ? 15 : 20;
     
     if(i < state.lives){
       // Coração cheio
       ctx.fillStyle = '#ff4444';
       ctx.beginPath();
-      ctx.moveTo(x + 8, y + 6);
-      ctx.bezierCurveTo(x + 8, y + 2, x + 4, y + 2, x + 4, y + 6);
-      ctx.bezierCurveTo(x + 4, y + 10, x + 8, y + 14, x + 12, y + 14);
-      ctx.bezierCurveTo(x + 16, y + 14, x + 20, y + 10, x + 20, y + 6);
-      ctx.bezierCurveTo(x + 20, y + 2, x + 16, y + 2, x + 12, y + 6);
-      ctx.bezierCurveTo(x + 10, y + 8, x + 8, y + 6, x + 8, y + 6);
+      ctx.moveTo(x + heartSize*0.32, y + heartSize*0.24);
+      ctx.bezierCurveTo(x + heartSize*0.32, y + heartSize*0.08, x + heartSize*0.16, y + heartSize*0.08, x + heartSize*0.16, y + heartSize*0.24);
+      ctx.bezierCurveTo(x + heartSize*0.16, y + heartSize*0.40, x + heartSize*0.32, y + heartSize*0.56, x + heartSize*0.48, y + heartSize*0.56);
+      ctx.bezierCurveTo(x + heartSize*0.64, y + heartSize*0.56, x + heartSize*0.80, y + heartSize*0.40, x + heartSize*0.80, y + heartSize*0.24);
+      ctx.bezierCurveTo(x + heartSize*0.80, y + heartSize*0.08, x + heartSize*0.64, y + heartSize*0.08, x + heartSize*0.48, y + heartSize*0.24);
+      ctx.bezierCurveTo(x + heartSize*0.40, y + heartSize*0.32, x + heartSize*0.32, y + heartSize*0.24, x + heartSize*0.32, y + heartSize*0.24);
       ctx.fill();
     } else {
       // Coração vazio
       ctx.strokeStyle = '#ff4444';
-      ctx.lineWidth = 2;
+      ctx.lineWidth = isMobile ? 1 : 2;
       ctx.beginPath();
-      ctx.moveTo(x + 8, y + 6);
-      ctx.bezierCurveTo(x + 8, y + 2, x + 4, y + 2, x + 4, y + 6);
-      ctx.bezierCurveTo(x + 4, y + 10, x + 8, y + 14, x + 12, y + 14);
-      ctx.bezierCurveTo(x + 16, y + 14, x + 20, y + 10, x + 20, y + 6);
-      ctx.bezierCurveTo(x + 20, y + 2, x + 16, y + 2, x + 12, y + 6);
-      ctx.bezierCurveTo(x + 10, y + 8, x + 8, y + 6, x + 8, y + 6);
+      ctx.moveTo(x + heartSize*0.32, y + heartSize*0.24);
+      ctx.bezierCurveTo(x + heartSize*0.32, y + heartSize*0.08, x + heartSize*0.16, y + heartSize*0.08, x + heartSize*0.16, y + heartSize*0.24);
+      ctx.bezierCurveTo(x + heartSize*0.16, y + heartSize*0.40, x + heartSize*0.32, y + heartSize*0.56, x + heartSize*0.48, y + heartSize*0.56);
+      ctx.bezierCurveTo(x + heartSize*0.64, y + heartSize*0.56, x + heartSize*0.80, y + heartSize*0.40, x + heartSize*0.80, y + heartSize*0.24);
+      ctx.bezierCurveTo(x + heartSize*0.80, y + heartSize*0.08, x + heartSize*0.64, y + heartSize*0.08, x + heartSize*0.48, y + heartSize*0.24);
+      ctx.bezierCurveTo(x + heartSize*0.40, y + heartSize*0.32, x + heartSize*0.32, y + heartSize*0.24, x + heartSize*0.32, y + heartSize*0.24);
       ctx.stroke();
     }
   }
   
-  // Overlay de game over
+  // Overlay de game over - ajustado para mobile
   if(state.gameOver){
     ctx.save();
     ctx.fillStyle = 'rgba(0,0,0,0.8)';
     ctx.fillRect(0,0,w,h);
     ctx.fillStyle = '#fff';
-    ctx.font = 'bold 48px system-ui';
+    ctx.font = isMobile ? 'bold 32px system-ui' : 'bold 48px system-ui';
     ctx.textAlign = 'center';
     ctx.fillText('GAME OVER', w/2, h/2);
-    ctx.font = '24px system-ui';
-    ctx.fillText(`Score Final: ${state.score}`, w/2, h/2 + 60);
+    ctx.font = isMobile ? '18px system-ui' : '24px system-ui';
+    ctx.fillText(`Score Final: ${state.score}`, w/2, h/2 + (isMobile ? 40 : 60));
     ctx.restore();
   }
   
-  // Overlay de fase
+  // Overlay de fase - ajustado para mobile
   if(state.phaseOverlay > 0){
     ctx.save();
     ctx.globalAlpha = Math.min(1, state.phaseOverlay);
     ctx.fillStyle = '#fff';
     
     // Ajustar tamanho da fonte para mobile
-    const isMobile = w < 600;
-    const fontSize = isMobile ? '32px' : '48px';
+    const fontSize = isMobile ? '28px' : '48px';
     ctx.font = `bold ${fontSize} system-ui`;
     ctx.textAlign = 'center';
     ctx.fillText(`FASE ${state.phase + 1}`, w/2, h/2);
