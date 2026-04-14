@@ -83,8 +83,9 @@ drawLoadingScreen();
 
 // Redirecionar após breve delay
 setTimeout(() => {
-  // Restaurar estado no localStorage para o jogo principal
-  localStorage.setItem('surf_bonus_return', JSON.stringify(savedState));
+  // Marcar que voltou do surf para o index restaurar o estado
+  const stateToReturn = { ...savedState, _returned: true };
+  localStorage.setItem('surf_bonus_return', JSON.stringify(stateToReturn));
   window.location.href = './index.html';
 }, 2000);
 

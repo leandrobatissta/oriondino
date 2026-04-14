@@ -89,7 +89,7 @@
     const btnW = Math.min(420, Math.max(220, w - sidePad*2));
     const btnH = Math.max(44, Math.min(74, Math.round(h*0.085)));
     const bx = Math.round((w-btnW)/2);
-    const by = Math.round(Math.min(h - btnH - 10, h*0.90 - btnH/2));
+    const by = Math.round(Math.min(h - btnH - 10, h*0.925 - btnH/2));
     return {x:bx, y:by, w:btnW, h:btnH};
   }
 
@@ -429,10 +429,12 @@
   const bg = new Image(); bg.src = 'assets/menu_bg.jpg';
   const SHEETS = {
     sprite1: { raw: new Image(), img: null, spr: { cols:5, rows:4, w:0, h:0, ready:false } },
-    sprite2: { raw: new Image(), img: null, spr: { cols:5, rows:4, w:0, h:0, ready:false } }
+    sprite2: { raw: new Image(), img: null, spr: { cols:5, rows:4, w:0, h:0, ready:false } },
+    sprite6: { raw: new Image(), img: null, spr: { cols:5, rows:4, w:0, h:0, ready:false } }
   };
   SHEETS.sprite1.raw.src = './sprite.png';
   SHEETS.sprite2.raw.src = './sprite2.png';
+  SHEETS.sprite6.raw.src = './sprite6.png';
 
   function hasRealAlpha(img){
     const W = img.naturalWidth || img.width || 0;
@@ -492,6 +494,7 @@
   }
   SHEETS.sprite1.raw.onload = () => { initSheet('sprite1'); recomputeAllBounds(); };
   SHEETS.sprite2.raw.onload = () => { initSheet('sprite2'); recomputeAllBounds(); };
+  SHEETS.sprite6.raw.onload = () => { initSheet('sprite6'); recomputeAllBounds(); };
 
   const CHARACTERS = {
     orion: { name:'Orion', sheetId:'sprite1', row:0, trim:{l:1,t:0,r:1,b:0}, bounds:null },
@@ -502,9 +505,16 @@
     yasminn: { name:'Yasminn', sheetId:'sprite2', row:0, trim:{l:1,t:0,r:1,b:0}, bounds:null },
     yasminn_dino: { name:'Yasminn (Dino)', sheetId:'sprite2', row:1, trim:{l:1,t:2,r:3,b:1}, bounds:null },
     yasminn_shark: { name:'Yasminn (Tubarão)', sheetId:'sprite2', row:2, trim:{l:6,t:0,r:10,b:0}, bounds:null },
-    yasminn_bear: { name:'Yasminn (Urso)', sheetId:'sprite2', row:3, trim:{l:1,t:0,r:1,b:0}, bounds:null }
+    yasminn_bear: { name:'Yasminn (Urso)', sheetId:'sprite2', row:3, trim:{l:1,t:0,r:1,b:0}, bounds:null },
+
+    orion_dino_ride: { name:'Orion & Dino', sheetId:'sprite6', row:0, trim:{l:1,t:0,r:1,b:0}, bounds:null },
+    dino_moto: { name:'Dino Moto', sheetId:'sprite6', row:1, trim:{l:1,t:0,r:1,b:0}, bounds:null },
+    tuba_carro: { name:'Tuba Carro', sheetId:'sprite6', row:2, trim:{l:1,t:0,r:1,b:0}, bounds:null },
+    urso_foguete: { name:'Urso Foguete', sheetId:'sprite6', row:3, trim:{l:1,t:0,r:1,b:0}, bounds:null }
   };
-  let currentCharacter = 'orion';
+  // Restaurar último personagem selecionado
+  const _savedChar = localStorage.getItem('dino_last_character');
+  let currentCharacter = (_savedChar && CHARACTERS[_savedChar]) ? _savedChar : 'orion';
 
   const RUN_SEQ = [0,1,2,3,4];
   function runFrameAt(timeMs){
@@ -578,6 +588,20 @@
     cactusImages.push(img);
   }
 
+  // Girassois: 15.png e 16.png, 5 cols x 4 rows, usamos linha 0 de cada
+  const SUNFLOWER_SHEETS = [
+    { img: new Image(), cols:5, rows:4, ready:false },
+    { img: new Image(), cols:5, rows:4, ready:false }
+  ];
+  SUNFLOWER_SHEETS[0].img.src = 'assets/15.png';
+  SUNFLOWER_SHEETS[1].img.src = 'assets/16.png';
+  SUNFLOWER_SHEETS[0].img.onload = () => { SUNFLOWER_SHEETS[0].ready = true; };
+  SUNFLOWER_SHEETS[1].img.onload = () => { SUNFLOWER_SHEETS[1].ready = true; };
+
+  // Tema de obstáculos: 'cactus' ou 'sunflower'
+  let obstacleTheme = localStorage.getItem('obstacle_theme') || 'cactus';
+  let sunflowerAnimFrame = 0; // frame atual da animação do girassol
+
   const phases = [
     { name:'Manhã', bg:['#87CEEB','#E8F7FF'], ground:'#D8B07B', speedMul:1.0, spawnMul:1.0 },
     { name:'Tarde', bg:['#FFE29F','#FFA99F'], ground:'#D4A574', speedMul:1.15, spawnMul:0.9 },
@@ -586,9 +610,22 @@
     { name:'Tempestade', bg:['#232526','#414345'], ground:'#7A5C44', speedMul:1.8, spawnMul:0.65 }
   ];
 
+  // ==== Detecção de retorno de bônus (antes de tudo) ====
+  (function checkBonusReturn(){
+    try{
+      const raw = localStorage.getItem('surf_bonus_return');
+      if(!raw) return;
+      const sv = JSON.parse(raw);
+      if(sv && sv._returned && sv.character){
+        window.__bonusReturn = sv;
+        localStorage.removeItem('surf_bonus_return');
+      }
+    }catch(_){}
+  })();
+
   // ==== Estados ====
   const state = {
-    mode:'characterSelect',
+    mode: window.__bonusReturn ? 'play' : 'characterSelect',
     score:0,
     hi:Number(localStorage.getItem('dino_hi')||0),
     phase:0,
@@ -610,7 +647,9 @@
       cdInvuln: 0,
       cdJump: 0,
       cdSlow: 0,
-      cdLife: 0
+      cdLife: 0,
+      cdSurf: 0,
+      cdCar: 0
     }
   };
   document.getElementById('hi').textContent = '0';
@@ -635,7 +674,8 @@
     dist:0,
     clouds:[]
   };
-  const player = { y:0, vy:0, onGround:true, t:0, f:0, scale:1.2 };
+  const player = { y:0, vy:0, onGround:true, t:0, f:0, scale:1.2,
+    spin:0, spinDir:1, doSpin:false, jumpTilt:0 }; // pirueta + tilt
 
   function drawHearts(x, y, size, spacing){
     ctx.save();
@@ -880,12 +920,34 @@
     // limpar tela para evitar resquício do menu
     ctx.save(); ctx.setTransform(1,0,0,1,0,0); ctx.clearRect(0,0,cvs.width,cvs.height); ctx.restore();
     state.mode='play'; hud.style.display='flex';
-    state.score = 0;
-    document.getElementById('sc').textContent = '0';
-    state.phase = 0;
+
+    // Verificar se voltou do bonus surf e restaurar estado
+    const surfReturn = window.__bonusReturn || null;
+    window.__bonusReturn = null; // consumir
+    const fromSurf = !!(surfReturn && surfReturn.character);
+
+    if(fromSurf){
+      state.score = surfReturn.score || 0;
+      // Restaurar vidas de antes do bonus (nao as perdidas dentro do bonus)
+      state.lives = surfReturn.livesOnEntry != null ? surfReturn.livesOnEntry : Math.max(1, surfReturn.lives || state.maxLives);
+      state.phase = surfReturn.phase || 0;
+      state.nextPhaseAt = surfReturn.nextPhaseAt || 10;
+      // upgradeAt = proximo multiplo de 10 acima do score atual
+      state.upgradeAt = Math.ceil((state.score + 1) / 10) * 10;
+      document.getElementById('sc').textContent = String(state.score);
+      document.getElementById('hi').textContent = String(bestCharacterScore || 0);
+      state.weather = surfReturn.weather || pickWeather();
+    } else {
+      state.score = 0;
+      document.getElementById('sc').textContent = '0';
+      state.phase = 0;
+      state.nextPhaseAt = 10;
+      state.upgradeAt = 10;
+      state.lives = state.maxLives;
+      state.weather = pickWeather();
+    }
+
     state.phaseOverlay = 4.2;
-    state.nextPhaseAt = 10;
-    state.upgradeAt = 10;
     state.upgradeOptions = null;
     state.power.invulnUntil = 0;
     state.power.jumpUntil = 0;
@@ -895,8 +957,7 @@
     state.power.cdSlow = 0;
     state.power.cdLife = 0;
     state.power.cdSurf = 0;
-    state.lives = state.maxLives;
-    state.weather = pickWeather();
+    state.power.cdCar = 0;
     state.lightning = 0;
     state.nextLightningAt = performance.now() + 2500 + Math.random()*2500;
     world.speed=world.baseSpeed();
@@ -995,18 +1056,53 @@
       wrapTextCentered(subtitle, w/2, subtitleY, w*0.90, Math.round(subSize*1.15), subFont);
     }
 
-    // botão COMEÇAR (usado também para limitar o grid no mobile)
+    // botão COMEÇAR (usado para limitar o grid)
     const br = getStartButtonRect();
+
+    // Botões de tema — acima do botão COMEÇAR
+    const themeBtnH = Math.round(h * 0.052);
+    const themeBtnW = Math.round(w * 0.36);
+    const themeBtnGap = Math.round(w * 0.04);
+    const themeTotalW = themeBtnW * 2 + themeBtnGap;
+    const themeBtnX1 = Math.round((w - themeTotalW) / 2);
+    const themeBtnX2 = themeBtnX1 + themeBtnW + themeBtnGap;
+    const themeBtnY = br.y - themeBtnH - Math.round(h * 0.018);
+
+    // label acima dos botões
+    ctx.fillStyle = 'rgba(255,255,255,0.65)';
+    ctx.font = `${Math.round(h*0.022)}px system-ui`;
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText('Obstáculos:', w/2, themeBtnY - Math.round(h*0.018));
+
+    const isCactus = obstacleTheme === 'cactus';
+    ctx.fillStyle = isCactus ? '#4ade80' : 'rgba(255,255,255,0.12)';
+    ctx.strokeStyle = isCactus ? '#16a34a' : 'rgba(255,255,255,0.35)';
+    ctx.lineWidth = isCactus ? 3 : 1;
+    ctx.beginPath(); ctx.roundRect(themeBtnX1, themeBtnY, themeBtnW, themeBtnH, 8); ctx.fill(); ctx.stroke();
+    ctx.fillStyle = isCactus ? '#14532d' : '#fff';
+    ctx.font = `bold ${Math.round(themeBtnH*0.44)}px system-ui`;
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText('\uD83C\uDF35 Cactos', themeBtnX1 + themeBtnW/2, themeBtnY + themeBtnH/2);
+
+    const isSunflower = obstacleTheme === 'sunflower';
+    ctx.fillStyle = isSunflower ? '#fde047' : 'rgba(255,255,255,0.12)';
+    ctx.strokeStyle = isSunflower ? '#ca8a04' : 'rgba(255,255,255,0.35)';
+    ctx.lineWidth = isSunflower ? 3 : 1;
+    ctx.beginPath(); ctx.roundRect(themeBtnX2, themeBtnY, themeBtnW, themeBtnH, 8); ctx.fill(); ctx.stroke();
+    ctx.fillStyle = isSunflower ? '#713f12' : '#fff';
+    ctx.font = `bold ${Math.round(themeBtnH*0.44)}px system-ui`;
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText('\uD83C\uDF3B Girassóis', themeBtnX2 + themeBtnW/2, themeBtnY + themeBtnH/2);
 
     const cards = Object.entries(CHARACTERS);
     const cols = w >= 860 ? 4 : (w >= 520 ? 3 : 2);
     const rows = Math.ceil(cards.length / cols);
     const gapX = Math.round(w*0.03);
-    const gapY = Math.round(h*0.028);
-    const startY = Math.max(Math.round(h*0.20), subtitleY + Math.round(h*0.055));
+    const gapY = Math.round(h*0.022);
+    const startY = Math.round(h * 0.22); // sincronizado com pickCharacterAt
     const availW = w - gapX*(cols+1);
-    const bottomPad = Math.max(10, Math.round(h*0.02));
-    const bottomLimit = Math.max(startY + 60, br.y - bottomPad);
+    // bottomLimit: acima do record (que fica acima dos botões de tema)
+    const bottomLimit = themeBtnY - Math.round(h * 0.09);
     const availH = Math.max(0, bottomLimit - startY);
     const cardW = Math.floor(availW / cols);
     const cardH = Math.floor(Math.min(cardW*0.82, (availH - gapY*(rows-1)) / rows));
@@ -1082,12 +1178,14 @@
       ctx.fillText(bestLine, nameX, cy + Math.round(cardH*0.76));
     }
 
+    // Record abaixo do grid, acima dos botões de tema
     ctx.textAlign='center';
-    ctx.fillStyle='rgba(255,255,255,0.86)';
-    ctx.font=`${Math.round(h*0.03)}px system-ui`;
+    ctx.fillStyle='rgba(255,255,255,0.75)';
+    ctx.font=`${Math.round(h*0.026)}px system-ui`;
+    ctx.textBaseline='middle';
     const bestName = bestCharacterId && CHARACTERS[bestCharacterId] ? CHARACTERS[bestCharacterId].name : '';
     const msg = bestName ? `Record: ${bestCharacterScore} (${bestName})` : `Record: ${bestCharacterScore || 0}`;
-    const recordY = Math.min(br.y - Math.round(br.h*0.55), bottomLimit - Math.round(h*0.02));
+    const recordY = themeBtnY - Math.round(h * 0.065);
     ctx.fillText(msg, w/2, recordY);
 
     // botão COMEÇAR
@@ -1102,17 +1200,66 @@
     ctx.font = `900 ${Math.round(br.h*0.42)}px system-ui`;
     ctx.textBaseline='middle';
     ctx.fillText('COMEÇAR A AVENTURA', w/2, br.y + br.h*0.52);
-    // (removido) texto extra para não poluir/atrapalhar no mobile
+
+    // Botões bônus: Surf (esq, 60pts) e Car (dir, 100pts)
+    const surfUnlocked = bestCharacterScore >= 60;
+    const carUnlocked  = bestCharacterScore >= 100;
+    const bbW = Math.round(br.h * 1.6);
+    const bbH = br.h;
+    const bbGap = Math.round(w * 0.016);
+    const bbSurfX = br.x - bbW - bbGap;
+    const bbCarX  = br.x + br.w + bbGap;
+    const bbY = br.y;
+
+    // --- Surf ---
+    ctx.globalAlpha = surfUnlocked ? 1.0 : 0.38;
+    ctx.fillStyle = surfUnlocked ? 'rgba(34,211,238,0.92)' : 'rgba(80,90,110,0.55)';
+    ctx.beginPath(); ctx.roundRect(bbSurfX, bbY, bbW, bbH, 9); ctx.fill();
+    ctx.strokeStyle = surfUnlocked ? '#0891b2' : 'rgba(255,255,255,0.12)';
+    ctx.lineWidth = surfUnlocked ? 2.5 : 1;
+    ctx.beginPath(); ctx.roundRect(bbSurfX, bbY, bbW, bbH, 9); ctx.stroke();
+    ctx.fillStyle = surfUnlocked ? '#0c1a2e' : 'rgba(255,255,255,0.35)';
+    ctx.font = `bold ${Math.round(bbH*0.32)}px system-ui`;
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText('🏄', bbSurfX + bbW/2, bbY + bbH * 0.36);
+    ctx.font = `bold ${Math.round(bbH*0.20)}px system-ui`;
+    ctx.fillText('SURF', bbSurfX + bbW/2, bbY + bbH * 0.65);
+    ctx.fillStyle = surfUnlocked ? 'rgba(0,0,0,0.5)' : 'rgba(255,255,255,0.45)';
+    ctx.font = `${Math.round(bbH*0.15)}px system-ui`;
+    ctx.fillText(surfUnlocked ? 'Bônus!' : '🔒 60pts', bbSurfX + bbW/2, bbY + bbH * 0.86);
+
+    // --- Car ---
+    ctx.globalAlpha = carUnlocked ? 1.0 : 0.38;
+    ctx.fillStyle = carUnlocked ? 'rgba(251,191,36,0.95)' : 'rgba(80,90,110,0.55)';
+    ctx.beginPath(); ctx.roundRect(bbCarX, bbY, bbW, bbH, 9); ctx.fill();
+    ctx.strokeStyle = carUnlocked ? '#b45309' : 'rgba(255,255,255,0.12)';
+    ctx.lineWidth = carUnlocked ? 2.5 : 1;
+    ctx.beginPath(); ctx.roundRect(bbCarX, bbY, bbW, bbH, 9); ctx.stroke();
+    ctx.fillStyle = carUnlocked ? '#1c0a00' : 'rgba(255,255,255,0.35)';
+    ctx.font = `bold ${Math.round(bbH*0.32)}px system-ui`;
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText('🚗', bbCarX + bbW/2, bbY + bbH * 0.36);
+    ctx.font = `bold ${Math.round(bbH*0.20)}px system-ui`;
+    ctx.fillText('CAR', bbCarX + bbW/2, bbY + bbH * 0.65);
+    ctx.fillStyle = carUnlocked ? 'rgba(0,0,0,0.5)' : 'rgba(255,255,255,0.45)';
+    ctx.font = `${Math.round(bbH*0.15)}px system-ui`;
+    ctx.fillText(carUnlocked ? 'Bônus!' : '🔒 100pts', bbCarX + bbW/2, bbY + bbH * 0.86);
+
+    ctx.globalAlpha = 1.0;
   }
 
   
     function spawn(){
       const u=UNIT();
-      const s=1+Math.floor(Math.random()*3);
+      const s=2+Math.floor(Math.random()*2); // s=2 ou 3, sempre grande
       const w=(0.9+0.5*s)*u*2, h=(1.2+0.5*s)*u*1;
       const gap=u*(20+Math.random()*16);
       const cactusIndex = Math.floor(Math.random()*14); // de 0 a 13
-      world.obstacles.push({x:cvs.clientWidth+gap,y:GY()-h+UNIT()*0.8,w,h,cactusIndex});
+      const sunflowerSheet = Math.floor(Math.random()*2);       // 0=15.png 1=16.png
+      const sunflowerRow = Math.floor(Math.random()*4);          // linha aleatória (0-3)
+      const sunflowerOffset = Math.random() * 100;               // fase aleatória ampla na animação
+      const sunflowerScale = 0.9 + Math.random() * 0.6;          // escala variada (0.9x a 1.5x)
+      world.obstacles.push({x:cvs.clientWidth+gap,y:GY()-h+UNIT()*0.8,w,h,cactusIndex,sunflowerSheet,sunflowerRow,sunflowerOffset,sunflowerScale});
     }
     
 
@@ -1120,49 +1267,30 @@
     const w=cvs.clientWidth,h=cvs.clientHeight;
     const br = getStartButtonRect();
 
-    // Reproduz o cálculo do subtitleY/startY para o hit-test casar com o layout
-    ctx.textAlign='center'; ctx.textBaseline='middle';
-    const title = 'ORION & YASMINN — CORRIDA DA AVENTURA';
-    let titleSize = Math.round(h*0.055);
-    ctx.font = `bold ${titleSize}px system-ui`;
-    while(titleSize > 18 && ctx.measureText(title).width > w*0.92){
-      titleSize = Math.round(titleSize * 0.92);
-      ctx.font = `bold ${titleSize}px system-ui`;
-    }
-    let titleBottomY = h*0.10 + titleSize*0.75;
-    if(ctx.measureText(title).width > w*0.92){
-      const t1 = 'ORION & YASMINN';
-      const t2 = 'CORRIDA DA AVENTURA';
-      let s1 = Math.round(h*0.055);
-      ctx.font = `bold ${s1}px system-ui`;
-      while(s1 > 16 && (ctx.measureText(t1).width > w*0.92 || ctx.measureText(t2).width > w*0.92)){
-        s1 = Math.round(s1 * 0.92);
-        ctx.font = `bold ${s1}px system-ui`;
-      }
-      const lh = Math.round(s1*1.05);
-      const tTop = h*0.085;
-      titleBottomY = tTop + lh + s1*0.75;
-    }
-    const subtitleY = Math.round(Math.min(h*0.24, titleBottomY + Math.max(10, Math.round(h*0.02))));
+    // startY: topo do grid (h*0.18 é conservador, sempre abaixo do título)
+    const startY = Math.round(h * 0.22);
+    // bottomLimit: acima dos botões de tema + record + label
+    const themeBtnH_p = Math.round(h * 0.052);
+    const themeBtnY_p = br.y - themeBtnH_p - Math.round(h * 0.018);
+    const bottomLimit = themeBtnY_p - Math.round(h * 0.09); // record + espaço
 
     const cards = Object.entries(CHARACTERS);
     const cols = w >= 860 ? 4 : (w >= 520 ? 3 : 2);
     const rows = Math.ceil(cards.length / cols);
     const gapX = Math.round(w*0.03);
-    const gapY = Math.round(h*0.028);
-    const startY = Math.max(Math.round(h*0.20), subtitleY + Math.round(h*0.055));
+    const gapY = Math.round(h*0.022);
     const availW = w - gapX*(cols+1);
-    const bottomPad = Math.max(10, Math.round(h*0.02));
-    const bottomLimit = Math.max(startY + 60, br.y - bottomPad);
     const availH = Math.max(0, bottomLimit - startY);
     const cardW = Math.floor(availW / cols);
     const cardH = Math.floor(Math.min(cardW*0.82, (availH - gapY*(rows-1)) / rows));
+
     for(let i=0;i<cards.length;i++){
       const [id] = cards[i];
       const cx = gapX + (i%cols)*(cardW+gapX);
       const cy = startY + Math.floor(i/cols)*(cardH+gapY);
       if(x>=cx && x<=cx+cardW && y>=cy && y<=cy+cardH){
         currentCharacter = id;
+        localStorage.setItem('dino_last_character', id);
         if(!CHARACTERS[id].bounds) CHARACTERS[id].bounds = computeBoundsFor(id);
         return true;
       }
@@ -1260,25 +1388,31 @@
       state.power.cdLife = 20;
     }
     if(id==='surf'){
-      // Salvar estado atual do jogo
-      state.savedGame = {
-        score: state.score,
-        lives: state.lives,
-        phase: state.phase,
-        character: state.currentCharacter,
-        weather: state.weather,
-        obstacles: [...world.obstacles],
-        worldSpeed: world.speed,
-        playerPos: { x: player.x, y: player.y, vy: player.vy, onGround: player.onGround }
+      const bonusSave = {
+        score: state.score, livesOnEntry: state.lives, lives: state.lives, phase: state.phase,
+        character: currentCharacter, weather: state.weather,
+        worldSpeed: world.speed, upgradeAt: state.upgradeAt, nextPhaseAt: state.nextPhaseAt
       };
-      
-      // Redirecionar para fase bonus surf
+      localStorage.setItem('surf_bonus_return', JSON.stringify(bonusSave));
       window.location.href = './bonus_surf.html';
-      return; // não continua para o modo play
+      return;
+    }
+    if(id==='car'){
+      const bonusSave = {
+        score: state.score, livesOnEntry: state.lives, lives: state.lives, phase: state.phase,
+        character: currentCharacter, weather: state.weather,
+        worldSpeed: world.speed, upgradeAt: state.upgradeAt, nextPhaseAt: state.nextPhaseAt
+      };
+      localStorage.setItem('surf_bonus_return', JSON.stringify(bonusSave));
+      window.location.href = './bonus_car.html';
+      return;
     }
     playUpgradeSfx(id);
     state.mode = 'play';
   }
+
+  // Controla qual bônus aparece na vez (alterna surf/car)
+  let _lastBonusShown = 'car'; // próxima vez aparece surf
 
   function openUpgrade(){
     const allOpts = [
@@ -1286,18 +1420,26 @@
       { id:'jump', title:'Pulo alto', desc:'Pulo + alto por 5 segundos', disabled: state.power.cdJump > 0 },
       { id:'slow', title:'Mais lento', desc:'Diminui a velocidade por 5 segundos', disabled: state.power.cdSlow > 0 },
       { id:'life', title:'Ganhar vida', desc:'+1 coração (máx 3)', disabled: state.power.cdLife > 0 || state.lives >= state.maxLives },
-      { id:'surf', title:'Talvez Surf?', desc:'Fase bonus na praia!', disabled: state.power.cdSurf > 0 }
+      { id:'surf', title:'Bônus Surf!', desc:'Fase bônus na praia!', disabled: state.power.cdSurf > 0 },
+      { id:'car', title:'Bônus Corrida!', desc:'Fase bônus no asfalto!', disabled: state.power.cdCar > 0 }
     ];
-    // Sorteia 3 das 5 opções, com menor chance de incluir 'life'
-    const includeLife = Math.random() < 0.25; // 25% de chance de incluir vida
-    const includeSurf = Math.random() < 0.3; // 30% de chance de incluir surf
+    const includeLife = Math.random() < 0.25;
+    // Alterna: se o último mostrado foi surf, agora mostra car, e vice-versa
+    const nextBonus = _lastBonusShown === 'surf' ? 'car' : 'surf';
+    const includeBonus = Math.random() < 0.35; // 35% de chance de incluir bônus
     let filtered = allOpts;
     if(!includeLife) filtered = filtered.filter(o => o.id !== 'life');
-    if(!includeSurf) filtered = filtered.filter(o => o.id !== 'surf');
+    // Remove AMBOS surf e car, depois reinsere apenas o que toca
+    filtered = filtered.filter(o => o.id !== 'surf' && o.id !== 'car');
+    if(includeBonus){
+      const bonusOpt = allOpts.find(o => o.id === nextBonus);
+      if(bonusOpt) filtered.push(bonusOpt);
+    }
     const shuffled = filtered.sort(() => Math.random() - 0.5);
     const opts = shuffled.slice(0, 3);
     state.upgradeOptions = opts;
     state.mode = 'upgrade';
+    if(includeBonus) _lastBonusShown = nextBonus;
   }
 
   function wrapTextCentered(text, x, y, maxWidth, lineHeight, font){
@@ -1413,28 +1555,74 @@
     unlockAudio();
     if(state.mode==='upgrade'){
       const p = eventToCanvasXY(e);
-      if(p && pickUpgradeAt(p.x, p.y)) return;
-      return;
+      if(p) pickUpgradeAt(p.x, p.y);
+      return; // nunca sai do upgrade sem escolher um card
     }
     if(state.mode==='characterSelect'){
       const p = eventToCanvasXY(e);
       if(p){
         const x = p.x;
         const y = p.y;
-        if(pickCharacterAt(x,y)) return;
+        const w = cvs.clientWidth;
+        const h = cvs.clientHeight;
+        // 1. Verificar botão COMEÇAR e bônus ao lado
         const br = getStartButtonRect();
-        if(x>=br.x && x<=br.x+br.w && y>=br.y && y<=br.y+br.h){
-          startGame();
+        const bbW2 = Math.round(br.h * 1.6);
+        const bbGap2 = Math.round(w * 0.016);
+        const bbSurfX2 = br.x - bbW2 - bbGap2;
+        const bbCarX2  = br.x + br.w + bbGap2;
+        if(bestCharacterScore >= 60 && x>=bbSurfX2 && x<=bbSurfX2+bbW2 && y>=br.y && y<=br.y+br.h){
+          const bs={score:0,livesOnEntry:state.maxLives,lives:state.maxLives,phase:0,character:currentCharacter,
+            weather:state.weather,worldSpeed:world.speed,upgradeAt:10,nextPhaseAt:10};
+          localStorage.setItem('surf_bonus_return',JSON.stringify(bs));
+          window.location.href='./bonus_surf.html'; return;
         }
+        if(bestCharacterScore >= 100 && x>=bbCarX2 && x<=bbCarX2+bbW2 && y>=br.y && y<=br.y+br.h){
+          const bs={score:0,livesOnEntry:state.maxLives,lives:state.maxLives,phase:0,character:currentCharacter,
+            weather:state.weather,worldSpeed:world.speed,upgradeAt:10,nextPhaseAt:10};
+          localStorage.setItem('surf_bonus_return',JSON.stringify(bs));
+          window.location.href='./bonus_car.html'; return;
+        }
+        if(x>=br.x && x<=br.x+br.w && y>=br.y && y<=br.y+br.h){
+          startGame(); return;
+        }
+        // 2. Verificar botões de tema
+        const themeBtnH2 = Math.round(h * 0.052);
+        const themeBtnW2 = Math.round(w * 0.36);
+        const themeBtnGap2 = Math.round(w * 0.04);
+        const themeTotalW2 = themeBtnW2 * 2 + themeBtnGap2;
+        const themeBtnX1b = Math.round((w - themeTotalW2) / 2);
+        const themeBtnX2b = themeBtnX1b + themeBtnW2 + themeBtnGap2;
+        const themeBtnY2 = br.y - themeBtnH2 - Math.round(h * 0.018);
+        if(y >= themeBtnY2 && y <= themeBtnY2 + themeBtnH2){
+          if(x >= themeBtnX1b && x <= themeBtnX1b + themeBtnW2){
+            obstacleTheme = 'cactus';
+            localStorage.setItem('obstacle_theme', 'cactus');
+            return;
+          }
+          if(x >= themeBtnX2b && x <= themeBtnX2b + themeBtnW2){
+            obstacleTheme = 'sunflower';
+            localStorage.setItem('obstacle_theme', 'sunflower');
+            return;
+          }
+        }
+        // 3. Verificar cards de personagem
+        pickCharacterAt(x, y);
         return;
       }
       return;
     }
     if(state.mode==='menu'){ startGame(); return; }
+    if(state.mode !== 'play') return;
     if(player.onGround){
-      const boost = performance.now() < state.power.jumpUntil ? 1.25 : 1.0;
+      const nowJ = performance.now();
+      const boost = nowJ < state.power.jumpUntil ? 1.25 : 1.0;
       player.vy=-world.jump()*boost;
       player.onGround=false;
+      // Pirueta durante pulo alto ou invencível
+      player.doSpin = (nowJ < state.power.jumpUntil || nowJ < state.power.invulnUntil);
+      player.spin = 0;
+      player.spinDir = Math.random() < 0.5 ? 1 : -1;
       try { jumpSound.currentTime = 0; } catch(_) {}
       safePlay(jumpSound);
     }
@@ -1452,6 +1640,10 @@
     localStorage.setItem('dino_best_by_character', JSON.stringify(bestByCharacter));
     localStorage.setItem('dino_best_character_id', '');
     localStorage.setItem('dino_best_character_score', '0');
+    localStorage.removeItem('dino_last_character');
+    localStorage.removeItem('obstacle_theme');
+    currentCharacter = 'orion';
+    obstacleTheme = 'cactus';
     document.getElementById('hi').textContent='0';
     document.getElementById('sc').textContent='0';
   };
@@ -1459,23 +1651,14 @@
   let last=performance.now();
   function loop(now){
     try {
-      const dt=Math.min(0.032,(now-last)/1000); last=now;
-      // Garante que o modo seja 'play' se estiver undefined
-      if(!state.mode) state.mode='play';
-      if(state.mode==='characterSelect'){
-        drawCharacterSelect(now);
-        requestAnimationFrame(loop); return;
-      }
-      if(state.mode==='upgrade'){
-        drawUpgrade(now);
-        requestAnimationFrame(loop); return;
-      }
-      if(state.mode==='menu'){
-        drawMenu();
-        requestAnimationFrame(loop); return;
-      }
+    const dt=Math.min(0.032,(now-last)/1000); last=now;
 
-    
+    // Atualizar frame do girassol (~8 fps)
+    sunflowerAnimFrame += dt * 8;
+
+    if(state.mode==='characterSelect'){ drawCharacterSelect(now); requestAnimationFrame(loop); return; }
+    if(state.mode==='menu'){ drawMenu(); requestAnimationFrame(loop); return; }
+
     // ====== JOGO ======
     // Tocar música de fundo se não estiver tocando
     if (!bgMusic.playing && state.mode === 'play') {
@@ -1595,34 +1778,69 @@
 
     // física
     player.vy += world.gravity()*dt; player.y += player.vy*dt;
-    const gy = GY() - 3.4*UNIT(); if(player.y>=gy){ player.y=gy; player.vy=0; player.onGround=true; } else player.onGround=false;
-
-    // velocidade linear (com fase)
-    world.speed += 0.12*UNIT()*dt * ph.speedMul;
-
-    // obstáculos
-    world.dist -= speedEff*dt;
-    if(world.dist<=0){
-      world.dist=UNIT()*(26+Math.random()*12) * ph.spawnMul;
-      spawn();
-    }
-    
-    
-    for(const o of world.obstacles){
-      o.x -= speedEff*dt;
-      
-      const cactus = (cactusImages && cactusImages[o.cactusIndex || 0]) ? cactusImages[o.cactusIndex || 0] : null;
-      if (cactus && cactus.complete) {
-        const ratio = cactus.naturalHeight / cactus.naturalWidth;
-        const drawW = o.w;
-        const drawH = drawW * ratio;
-        ctx.drawImage(cactus, o.x, o.y - (drawH - o.h), drawW, drawH);
+    const gy = GY() - 3.4*UNIT();
+    if(player.y>=gy){
+      player.y=gy; player.vy=0; player.onGround=true;
+      player.spin=0; player.doSpin=false; player.jumpTilt=0;
+    } else {
+      player.onGround=false;
+      if(player.doSpin){
+        player.spin += dt * player.spinDir * (Math.PI*2 / 1.0);
       } else {
-        ctx.fillStyle='#2e7d32';
-        ctx.fillRect(o.x,o.y,o.w,o.h);
+        // inclina para frente ao subir, endireita ao descer
+        if(player.vy < 0) player.jumpTilt = Math.max(-0.22, player.jumpTilt - dt * 3.5);
+        else               player.jumpTilt = Math.min(0,     player.jumpTilt + dt * 4.0);
+      }
+    }
+
+    // velocidade linear e obstáculos — pausados durante upgrade
+    const isUpgrading = state.mode === 'upgrade';
+    if(!isUpgrading){
+      world.speed += 0.12*UNIT()*dt * ph.speedMul;
+      world.dist -= speedEff*dt;
+      if(world.dist<=0){
+        world.dist=UNIT()*(26+Math.random()*12) * ph.spawnMul;
+        spawn();
+      }
+    }
+
+    for(const o of world.obstacles){
+      if(!isUpgrading) o.x -= speedEff*dt;
+      
+      if(obstacleTheme === 'sunflower'){
+        const sIdx = o.sunflowerSheet ?? (o.cactusIndex % 2);
+        const sf = SUNFLOWER_SHEETS[sIdx];
+        if(sf.ready && sf.img.complete){
+          const frameCol = Math.floor(sunflowerAnimFrame + (o.sunflowerOffset||0)) % sf.cols;
+          const row = o.sunflowerRow ?? 0;
+          const fw = sf.img.naturalWidth / sf.cols;
+          const fh = sf.img.naturalHeight / sf.rows;
+          // Mesmo tamanho visual do cacto: drawW = o.w, drawH proporcional
+          const drawW = o.w * (o.sunflowerScale || 1.0);
+          const drawH = drawW * (fh / fw);
+          ctx.save();
+          ctx.translate(o.x + drawW, o.y - (drawH - o.h));
+          ctx.scale(-1, 1);
+          ctx.drawImage(sf.img, frameCol * fw, row * fh, fw, fh, 0, 0, drawW, drawH);
+          ctx.restore();
+        } else {
+          ctx.fillStyle='#facc15';
+          ctx.fillRect(o.x,o.y,o.w,o.h);
+        }
+      } else {
+        const cactus = (cactusImages && cactusImages[o.cactusIndex || 0]) ? cactusImages[o.cactusIndex || 0] : null;
+        if (cactus && cactus.complete) {
+          const ratio = cactus.naturalHeight / cactus.naturalWidth;
+          const drawW = o.w;
+          const drawH = drawW * ratio;
+          ctx.drawImage(cactus, o.x, o.y - (drawH - o.h), drawW, drawH);
+        } else {
+          ctx.fillStyle='#2e7d32';
+          ctx.fillRect(o.x,o.y,o.w,o.h);
+        }
       }
     
-      if (!o.passed && o.x + o.w < PLAYER_X) {
+      if (!o.passed && o.x + o.w < PLAYER_X && state.mode === 'play') {
         o.passed = true;
         state.score++;
         if(state.power.cdInvuln > 0) state.power.cdInvuln--;
@@ -1630,6 +1848,7 @@
         if(state.power.cdSlow > 0) state.power.cdSlow--;
         if(state.power.cdLife > 0) state.power.cdLife--;
         if(state.power.cdSurf > 0) state.power.cdSurf--;
+        if(state.power.cdCar > 0) state.power.cdCar--;
         const tNow = performance.now();
         if(tNow - state.lastPointAt > 80) {
           try { pointSound.currentTime = 0; } catch(_) {}
@@ -1694,6 +1913,17 @@
       const invOn = nowFx < state.power.invulnUntil;
       const jOn = nowFx < state.power.jumpUntil;
       const slOn = nowFx < state.power.slowUntil;
+
+      // Aplicar pirueta ou tilt no pulo
+      const cx = destX + sprW*0.5;
+      const cy = destY + sprH*0.5;
+      if(!player.onGround && (player.doSpin ? player.spin !== 0 : player.jumpTilt !== 0)){
+        ctx.save();
+        ctx.translate(cx, cy);
+        ctx.rotate(player.doSpin ? player.spin : player.jumpTilt);
+        ctx.translate(-cx, -cy);
+      }
+
       if(invOn){
         ctx.save();
         ctx.globalAlpha = 0.70;
@@ -1723,6 +1953,8 @@
       } else {
         ctx.drawImage(s.img, r.sx, r.sy, r.sw, r.sh, destX, destY, sprW, sprH);
       }
+      // Restaurar contexto da pirueta/tilt
+      if(!player.onGround && (player.doSpin ? player.spin !== 0 : player.jumpTilt !== 0)) ctx.restore();
     } else {
       // Fallback: desenha retângulo simples se sprite não carregou
       ctx.fillStyle = '#4a4a4a';
@@ -1734,7 +1966,10 @@
     // colisão: AABB simples (reduz 1 vida)
     for(let i = world.obstacles.length - 1; i >= 0; i--){
       const o = world.obstacles[i];
-      if(destX < o.x + o.w && destX + sprW > o.x && destY < o.y + o.h && destY + sprH > o.y){
+      // Para girassol, hitbox usa largura visual real
+      // Hitbox igual para cacto e girassol: o.w × o.h (base do sprite)
+      let hitW = o.w, hitH = o.h, hitX = o.x, hitY = o.y;
+      if(destX < hitX + hitW && destX + sprW > hitX && destY < hitY + hitH && destY + sprH > hitY){
         if(performance.now() < state.power.invulnUntil) break;
         state.lives = Math.max(0, state.lives - 1);
         try { hitSound.currentTime = 0; } catch(_) {}
@@ -1758,6 +1993,11 @@
     }
 
     drawGameHUD(w, h);
+
+    // overlay de upgrade (powerup selection)
+    if(state.mode === 'upgrade') {
+      drawUpgrade(now);
+    }
 
     // overlay de fase
     if(state.phaseOverlay > 0) {
@@ -1800,6 +2040,11 @@ function computeObstacleBounds(img){
 }
 
 
+// Se voltou de bônus, retomar jogo automaticamente
+if(window.__bonusReturn){
+  currentCharacter = window.__bonusReturn.character || currentCharacter;
+  startGame();
+}
 requestAnimationFrame(loop);
 })();
 </script>

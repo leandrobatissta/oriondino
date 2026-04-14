@@ -1,0 +1,559 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+<title>Orion & Yasminn — Bônus Car</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;}
+body{background:#111;overflow:hidden;font-family:system-ui;}
+.wrap{display:grid;place-items:center;height:100vh;width:100vw;}
+.stack{position:relative;width:100%;max-width:520px;height:100vh;max-height:100vh;}
+#game{width:100%;height:100%;background:#000;display:block;touch-action:manipulation;}
+canvas{display:block;image-rendering:pixelated;image-rendering:-moz-crisp-edges;image-rendering:crisp-edges;}
+</style>
+</head>
+<body>
+<div class="wrap"><div class="stack"><canvas id="game"></canvas></div></div>
+<audio id="hitSfx" src="assets/hit.mp3" preload="auto"></audio>
+<audio id="pointSfx" src="assets/point.mp3" preload="auto"></audio>
+<audio id="phaseSfx" src="assets/phase_up.mp3" preload="auto"></audio>
+<script>
+const cvs = document.getElementById('game');
+const ctx = cvs.getContext('2d');
+ctx.imageSmoothingEnabled = false;
+
+function fit(){
+  const dpr = Math.max(1, Math.min(window.devicePixelRatio||1, 2));
+  const w = cvs.clientWidth, h = cvs.clientHeight;
+  cvs.width = Math.round(w*dpr); cvs.height = Math.round(h*dpr);
+  ctx.setTransform(dpr,0,0,dpr,0,0);
+  ctx.imageSmoothingEnabled = false;
+}
+new ResizeObserver(fit).observe(cvs); fit();
+
+// ===================== AUDIO WEB API =====================
+let AC = null;
+function ensureAC(){
+  if(!AC) AC = new (window.AudioContext || window.webkitAudioContext)();
+  if(AC.state === 'suspended') AC.resume();
+  return AC;
+}
+
+// Motor contínuo — dois osciladores detuned para som mais orgânico
+let engineNode = null, engineNode2 = null, engineGain = null;
+function startEngine(){
+  const ac = ensureAC();
+  if(engineNode) return;
+  engineGain = ac.createGain(); engineGain.gain.value = 0.09;
+  engineGain.connect(ac.destination);
+  // oscilador principal
+  engineNode = ac.createOscillator();
+  engineNode.type = 'sawtooth';
+  engineNode.frequency.value = 42;
+  engineNode.connect(engineGain);
+  engineNode.start();
+  // segundo oscilador levemente desafinado para batimento
+  engineNode2 = ac.createOscillator();
+  engineNode2.type = 'sawtooth';
+  engineNode2.frequency.value = 44;
+  engineNode2.connect(engineGain);
+  engineNode2.start();
+}
+function updateEngineFreq(){
+  if(!engineNode) return;
+  const base = 42 + state.phase * 6 + state.obstacleSpeed * 30;
+  engineNode.frequency.setTargetAtTime(base, AC.currentTime, 1.2);
+  engineNode2.frequency.setTargetAtTime(base * 1.03, AC.currentTime, 1.5);
+}
+function stopEngine(){
+  if(!engineNode) return;
+  try{ engineNode.stop(); } catch(_){}
+  try{ engineNode2.stop(); } catch(_){}
+  engineNode = null; engineNode2 = null; engineGain = null;
+}
+
+// Som de derrapagem
+function playSkid(){
+  try{
+    const ac = ensureAC();
+    const buf = ac.createBuffer(1, ac.sampleRate * 0.35, ac.sampleRate);
+    const d = buf.getChannelData(0);
+    for(let i=0;i<d.length;i++) d[i] = (Math.random()*2-1) * Math.pow(1 - i/d.length, 0.6);
+    const src = ac.createBufferSource();
+    const filt = ac.createBiquadFilter(); filt.type='bandpass'; filt.frequency.value=900; filt.Q.value=2;
+    const g = ac.createGain(); g.gain.value = 0.55;
+    src.buffer = buf;
+    src.connect(filt); filt.connect(g); g.connect(ac.destination);
+    src.start();
+  }catch(_){}
+}
+
+// Som de batida
+function playHitSfx(){
+  try{
+    const ac = ensureAC();
+    const buf = ac.createBuffer(1, ac.sampleRate * 0.25, ac.sampleRate);
+    const d = buf.getChannelData(0);
+    for(let i=0;i<d.length;i++) d[i] = (Math.random()*2-1) * Math.pow(1 - i/d.length, 1.2);
+    const src = ac.createBufferSource();
+    const g = ac.createGain(); g.gain.value = 0.7;
+    src.buffer = buf; src.connect(g); g.connect(ac.destination); src.start();
+  }catch(_){}
+}
+
+// Música de fundo — loop de bateria/bass sintetizado
+let bgLoopNode = null;
+function startBgMusic(){
+  try{
+    const ac = ensureAC();
+    if(bgLoopNode) return;
+    const BPM = 128, beat = 60/BPM;
+    const bars = 4, beats = bars * 4;
+    const len = beats * beat;
+    const sr = ac.sampleRate;
+    const buf = ac.createBuffer(2, Math.ceil(sr * len), sr);
+
+    for(let ch=0;ch<2;ch++){
+      const d = buf.getChannelData(ch);
+      // kick em cada beat 0 e 2
+      for(let b=0;b<beats;b++){
+        if(b%4===0 || b%4===2){
+          const start = Math.floor(b*beat*sr);
+          for(let i=0;i<sr*0.12;i++){
+            const env = Math.pow(1-i/(sr*0.12),2);
+            const freq = 60 * Math.exp(-i/(sr*0.06));
+            d[start+i] = (d[start+i]||0) + Math.sin(2*Math.PI*freq*i/sr) * env * 0.7;
+          }
+        }
+        // hihat em cada 8th
+        const hStart = Math.floor(b*beat*sr);
+        for(let i=0;i<sr*0.04;i++){
+          const env = Math.pow(1-i/(sr*0.04),1.5);
+          d[hStart+i] = (d[hStart+i]||0) + (Math.random()*2-1)*env*0.25;
+        }
+        // bass synth em beats 0,1
+        if(b%4===0||b%4===1){
+          const bStart = Math.floor(b*beat*sr);
+          const freq = b%8<4 ? 55 : 49;
+          for(let i=0;i<sr*beat*0.8;i++){
+            const env = Math.pow(1-i/(sr*beat*0.8),0.5);
+            d[bStart+i] = (d[bStart+i]||0) + Math.sin(2*Math.PI*freq*i/sr)*env*0.35;
+          }
+        }
+        // lead melody
+        const notes = [220,246,261,293,220,246,294,330];
+        const nFreq = notes[b % notes.length];
+        const nStart = Math.floor(b*beat*sr);
+        for(let i=0;i<sr*beat*0.5;i++){
+          const env = Math.pow(1-i/(sr*beat*0.5),0.8);
+          d[nStart+i] = (d[nStart+i]||0) + Math.sin(2*Math.PI*nFreq*i/sr)*env*0.18;
+        }
+      }
+    }
+
+    bgLoopNode = ac.createBufferSource();
+    const masterG = ac.createGain(); masterG.gain.value = 0.55;
+    bgLoopNode.buffer = buf;
+    bgLoopNode.loop = true;
+    bgLoopNode.connect(masterG); masterG.connect(ac.destination);
+    bgLoopNode.start();
+  }catch(_){}
+}
+function stopBgMusic(){
+  try{ if(bgLoopNode){ bgLoopNode.stop(); bgLoopNode=null; } }catch(_){}
+}
+
+function safePlayEl(el){
+  if(!el) return;
+  try{ const p=el.play(); if(p) p.catch(()=>{}); }catch(_){}
+}
+
+// ===================== SPRITES =====================
+const PLAYER_SPRITE = new Image();
+PLAYER_SPRITE.src = './car_personagem.png';
+const OBSTACLE_SPRITE = new Image();
+OBSTACLE_SPRITE.src = './car_obsstaculos.png';
+const COLS = 5, ROWS = 4;
+let playerSpriteReady = false, obsSpriteReady = false;
+PLAYER_SPRITE.onload = () => { playerSpriteReady = true; };
+OBSTACLE_SPRITE.onload = () => { obsSpriteReady = true; };
+
+// ===================== ESTADO SALVO =====================
+let savedGame = null;
+try{ const raw=localStorage.getItem('surf_bonus_return'); if(raw) savedGame=JSON.parse(raw); }catch(_){}
+
+// Personagem aleatório a cada partida
+const RANDOM_ROW = Math.floor(Math.random() * 4);
+function playerRow(){ return RANDOM_ROW; }
+
+// ===================== ESTADO DO JOGO =====================
+const LANES = 2;
+const state = {
+  t:0, score: 0,
+  bonusScore:0, bonusGoal:15,
+  lives: savedGame?.lives||3, maxLives: savedGame?.maxLives||3,
+  phase:0, nextPhaseAt:8,
+  gameOver:false, bonusWon:false, phaseOverlay:0, lastPointAt:0,
+  playerLane:1, targetLane:1, prevLane:1,
+  laneT:1.0, playerFrame:2,
+  hitTime:-99, HIT_COOLDOWN:1.5,
+  obstacles:[], nextObstacleAt:0,
+  obstacleSpeed:0.35, roadOffset:0, roadSpeed:0.4,
+};
+
+// ===================== GEOMETRIA =====================
+function W(){ return cvs.clientWidth; }
+function H(){ return cvs.clientHeight; }
+
+const ROAD = {
+  horizonY: ()=> H()*0.20,
+  baseY:    ()=> H(),           // pista vai até a base total da tela
+  horizonW: ()=> W()*0.22,
+  baseW:    ()=> W()*1.0,
+  laneX: (lane, t)=>{
+    const cx=W()/2;
+    const halfBase = ROAD.baseW()/2;
+    const halfHorizon = ROAD.horizonW()/2;
+    const halfLane = (halfHorizon + (halfBase - halfHorizon)*t) / LANES;
+    return lane===0 ? cx - halfLane*0.5 - halfLane*0.5 : cx + halfLane*0.5 + halfLane*0.5;
+  },
+  carW: (t, baseW)=> baseW*(0.12 + 0.88*t),
+};
+
+// ===================== SPAWN =====================
+function spawnObstacle(){
+  const lane = Math.floor(Math.random()*LANES);
+  state.obstacles.push({
+    lane, t:0.0,
+    speed: state.obstacleSpeed*(0.82+Math.random()*0.36),
+    passed:false,
+    row: Math.floor(Math.random()*ROWS),
+    animTimer:0, animFrame:Math.floor(Math.random()*COLS),
+  });
+}
+
+// ===================== INPUT =====================
+let audioStarted = false;
+
+function switchLane(clientX){
+  const rect = cvs.getBoundingClientRect();
+  // converte clientX para coordenada dentro do canvas lógico
+  const canvasX = (clientX - rect.left) * (cvs.clientWidth / rect.width);
+  const newLane = canvasX < cvs.clientWidth / 2 ? 0 : 1;
+  if(newLane !== state.targetLane){
+    state.prevLane = state.targetLane;
+    state.targetLane = newLane;
+    state.laneT = 0.0;
+    playSkid();
+  }
+}
+
+function handleTouch(e){
+  try{ e.preventDefault(); }catch(_){}
+  if(!audioStarted){ audioStarted=true; startBgMusic(); startEngine(); }
+  if(state.gameOver) return;
+  if(e.changedTouches && e.changedTouches.length > 0){
+    switchLane(e.changedTouches[0].clientX);
+  }
+}
+
+function handlePointer(e){
+  // ignora se for touch (touchstart já tratou)
+  if(e.pointerType === 'touch') return;
+  if(!audioStarted){ audioStarted=true; startBgMusic(); startEngine(); }
+  if(state.gameOver) return;
+  switchLane(e.clientX);
+}
+
+cvs.addEventListener('touchstart', handleTouch, {passive:false});
+cvs.addEventListener('pointerdown', handlePointer);
+
+window.addEventListener('keydown', e=>{
+  if(e.code==='ArrowLeft' || e.code==='KeyA'){
+    if(!audioStarted){ audioStarted=true; startBgMusic(); startEngine(); }
+    if(state.targetLane!==0){ state.prevLane=state.targetLane; state.targetLane=0; state.laneT=0; playSkid(); }
+  }
+  if(e.code==='ArrowRight' || e.code==='KeyD'){
+    if(!audioStarted){ audioStarted=true; startBgMusic(); startEngine(); }
+    if(state.targetLane!==1){ state.prevLane=state.targetLane; state.targetLane=1; state.laneT=0; playSkid(); }
+  }
+});
+
+// ===================== DRAW =====================
+function drawBackground(w,h,phase){
+  const skies=[['#87CEEB','#c8f0a0'],['#FFE29F','#FFA99F'],['#FF6A88','#FF99AC'],['#0F2027','#203A43'],['#1a0533','#2d0a55']];
+  const [top,bot]=skies[Math.min(phase,skies.length-1)];
+  const g=ctx.createLinearGradient(0,0,0,h*0.45);
+  g.addColorStop(0,top); g.addColorStop(1,bot);
+  ctx.fillStyle=g; ctx.fillRect(0,0,w,h*0.45);
+  // terra/relva lateral
+  const grassColors=['#6ab83a','#5aa02a','#3d7a1e','#2a4a10','#1a2a08'];
+  ctx.fillStyle=grassColors[Math.min(phase,grassColors.length-1)];
+  ctx.fillRect(0,h*0.45,w,h*0.55);
+  // marcações de calçada
+  const hy=ROAD.horizonY(), by=ROAD.baseY(), hw=ROAD.horizonW()/2, bw=ROAD.baseW()/2;
+  ctx.fillStyle='rgba(200,180,100,0.25)';
+  ctx.beginPath(); ctx.moveTo(w/2-hw,hy); ctx.lineTo(0,by); ctx.lineTo(0,h); ctx.lineTo(w/2-bw,by); ctx.closePath(); ctx.fill();
+  ctx.beginPath(); ctx.moveTo(w/2+hw,hy); ctx.lineTo(w,by); ctx.lineTo(w,h); ctx.lineTo(w/2+bw,by); ctx.closePath(); ctx.fill();
+}
+
+function drawRoad(w,h){
+  const hy=ROAD.horizonY(), by=ROAD.baseY();
+  const hw=ROAD.horizonW()/2, bw=ROAD.baseW()/2;
+  const cx=w/2;
+
+  // asfalto
+  const rg=ctx.createLinearGradient(0,hy,0,by);
+  rg.addColorStop(0,'#444'); rg.addColorStop(1,'#333');
+  ctx.fillStyle=rg;
+  ctx.beginPath();
+  ctx.moveTo(cx-hw,hy); ctx.lineTo(cx+hw,hy);
+  ctx.lineTo(cx+bw,by); ctx.lineTo(cx-bw,by);
+  ctx.closePath(); ctx.fill();
+
+  // bordas amarelas
+  ctx.strokeStyle='#f5c518'; ctx.lineWidth=3;
+  ctx.beginPath();
+  ctx.moveTo(cx-hw,hy); ctx.lineTo(cx-bw,by);
+  ctx.moveTo(cx+hw,hy); ctx.lineTo(cx+bw,by);
+  ctx.stroke();
+
+  // linha central tracejada animada com perspectiva
+  const DASHES=14;
+  for(let i=0;i<DASHES;i++){
+    const t0=((i/DASHES)+state.roadOffset)%1;
+    const t1=(((i+0.42)/DASHES)+state.roadOffset)%1;
+    if(t0>t1) continue;
+    const y0=hy+(by-hy)*t0, y1=hy+(by-hy)*t1;
+    const lw=Math.max(1,3*t0);
+    ctx.beginPath(); ctx.moveTo(cx,y0); ctx.lineTo(cx,y1);
+    ctx.strokeStyle='rgba(255,255,255,0.8)'; ctx.lineWidth=lw; ctx.stroke();
+  }
+
+  // marcas laterais das faixas
+  for(let i=0;i<DASHES;i++){
+    const t0=((i/DASHES)+state.roadOffset*0.7)%1;
+    const t1=(((i+0.35)/DASHES)+state.roadOffset*0.7)%1;
+    if(t0>t1) continue;
+    const y0=hy+(by-hy)*t0, y1=hy+(by-hy)*t1;
+    const xL0=cx-(hw+(bw-hw)*t0)*0.5, xR0=cx+(hw+(bw-hw)*t0)*0.5;
+    const lw=Math.max(0.5,1.5*t0);
+    ctx.strokeStyle='rgba(255,255,255,0.35)'; ctx.lineWidth=lw;
+    ctx.beginPath(); ctx.moveTo(xL0,y0); ctx.lineTo(cx-(hw+(bw-hw)*t1)*0.5,y1); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(xR0,y0); ctx.lineTo(cx+(hw+(bw-hw)*t1)*0.5,y1); ctx.stroke();
+  }
+}
+
+function drawPlayer(w,h){
+  if(!playerSpriteReady) return;
+  const row=playerRow();
+  const fw=PLAYER_SPRITE.naturalWidth/COLS, fh=PLAYER_SPRITE.naturalHeight/ROWS;
+  const t=0.78; // mais acima (era 0.97)
+  const laneX=ROAD.laneX(state.playerLane,t);
+  const carBaseW=ROAD.baseW()/LANES;
+  const drawW=ROAD.carW(t,carBaseW)*0.46; // menor (era 0.72)
+  const drawH=drawW*(fh/fw);
+  const by=ROAD.baseY(), hy=ROAD.horizonY();
+  const py=(hy+(by-hy)*t) - drawH*0.9;
+
+  const blinking=(state.t-state.hitTime)<state.HIT_COOLDOWN;
+  if(blinking&&Math.floor(state.t*8)%2===0) return;
+
+  // leve inclinação ao mudar de faixa
+  const tilt = state.laneT<1 ? (state.targetLane===1?0.08:-0.08)*(1-state.laneT)*2 : 0;
+  ctx.save();
+  ctx.translate(laneX, py+drawH/2);
+  ctx.rotate(tilt);
+  ctx.translate(-drawW/2,-drawH/2);
+  ctx.drawImage(PLAYER_SPRITE, state.playerFrame*fw, row*fh, fw, fh, 0,0, drawW, drawH);
+  ctx.restore();
+}
+
+function drawObstacles(w,h){
+  if(!obsSpriteReady) return;
+  const fw=OBSTACLE_SPRITE.naturalWidth/COLS, fh=OBSTACLE_SPRITE.naturalHeight/ROWS;
+  const hy=ROAD.horizonY(), by=ROAD.baseY();
+  const carBaseW=ROAD.baseW()/LANES;
+  for(const obs of state.obstacles){
+    const t=obs.t;
+    const laneX=ROAD.laneX(obs.lane,t);
+    const drawW=ROAD.carW(t,carBaseW)*0.44;
+    const drawH=drawW*(fh/fw);
+    const py=hy+(by-hy)*t - drawH*0.5;
+    const alpha=Math.min(1,t*6);
+    ctx.save(); ctx.globalAlpha=alpha;
+    ctx.drawImage(OBSTACLE_SPRITE, obs.animFrame*fw, obs.row*fh, fw, fh, laneX-drawW/2, py, drawW, drawH);
+    ctx.restore();
+  }
+}
+
+function drawHUD(w,h){
+  const pad=Math.round(h*0.022), sz=Math.round(h*0.042);
+  ctx.save();
+  ctx.fillStyle='rgba(0,0,0,0.5)'; ctx.fillRect(0,0,w,sz+pad*2+4);
+  ctx.fillStyle='#fff'; ctx.font=`bold ${sz}px system-ui`;
+  ctx.textAlign='left'; ctx.textBaseline='middle';
+  ctx.fillText(`SCORE ${state.bonusScore}`, pad, pad+sz/2);
+  const heartSz=Math.round(sz*0.9);
+  ctx.font=`${heartSz}px sans-serif`; ctx.textAlign='right';
+  for(let i=0;i<state.maxLives;i++){
+    ctx.fillStyle=i<state.lives?'#ef4444':'rgba(255,255,255,0.2)';
+    ctx.fillText('♥', w-pad-i*(heartSz*1.1), pad+sz/2);
+  }
+  // setas hint
+  ctx.globalAlpha=0.28; ctx.font=`bold ${Math.round(h*0.065)}px sans-serif`; ctx.textAlign='center';
+  ctx.fillStyle='#fff';
+  ctx.fillText('◀', w*0.12, h*0.78);
+  ctx.fillText('▶', w*0.88, h*0.78);
+  ctx.restore();
+}
+
+function drawPhaseOverlay(w,h){
+  if(state.phaseOverlay<=0) return;
+  const names=['Fase 1','Fase 2','Fase 3','Fase 4','Fase 5'];
+  ctx.save(); ctx.globalAlpha=Math.min(1,state.phaseOverlay);
+  ctx.fillStyle='rgba(0,0,0,0.4)'; ctx.fillRect(0,0,w,h);
+  ctx.fillStyle='#fde047'; ctx.font=`bold ${Math.round(h*0.09)}px system-ui`;
+  ctx.textAlign='center'; ctx.textBaseline='middle';
+  ctx.fillText(names[Math.min(state.phase,4)], w/2, h*0.38);
+  ctx.restore();
+}
+
+function drawGameOver(w,h){
+  ctx.save();
+  ctx.fillStyle=state.bonusWon?'rgba(0,80,20,0.85)':'rgba(0,0,0,0.78)'; ctx.fillRect(0,0,w,h);
+  ctx.fillStyle=state.bonusWon?'#fde047':'#fff';
+  ctx.font=`bold ${Math.round(h*0.08)}px system-ui`;
+  ctx.textAlign='center'; ctx.textBaseline='middle';
+  ctx.fillText(state.bonusWon?'🚗 INCRÍVEL!':'FIM DE CORRIDA!', w/2, h*0.36);
+  ctx.fillStyle='#fff'; ctx.font=`${Math.round(h*0.045)}px system-ui`;
+  ctx.fillText('Voltando ao jogo...', w/2, h*0.50);
+  if(state.bonusWon){
+    ctx.fillStyle='rgba(255,255,255,0.7)'; ctx.font=`${Math.round(h*0.032)}px system-ui`;
+    ctx.fillText(`+${state.bonusScore} pontos ganhos!`, w/2, h*0.60);
+  }
+  ctx.restore();
+}
+
+// ===================== UPDATE =====================
+function update(dt){
+  state.t+=dt;
+  state.roadOffset=(state.roadOffset+state.roadSpeed*dt)%1;
+  updateEngineFreq();
+
+  // Transição de faixa
+  if(state.laneT<1.0){
+    state.laneT=Math.min(1.0,state.laneT+dt*7.0);
+    state.playerLane=state.targetLane;
+    state.playerFrame = state.laneT<0.45 ? (state.targetLane===0?0:4) : 2;
+  } else {
+    state.playerLane=state.targetLane;
+    state.playerFrame=2;
+  }
+
+  // Animar obstáculos
+  for(const obs of state.obstacles){
+    obs.animTimer+=dt;
+    if(obs.animTimer>0.10){ obs.animTimer=0; obs.animFrame=(obs.animFrame+1)%COLS; }
+  }
+
+  // Spawn — NUNCA dois carros lado a lado na mesma posição
+  const spawnInt=Math.max(0.85,2.0-state.phase*0.16);
+  if(state.t>=state.nextObstacleAt){
+    state.nextObstacleAt=state.t+spawnInt*(0.65+Math.random()*0.7);
+    // Verificar faixas ocupadas perto do topo (t < 0.25)
+    const busyLanes = new Set(state.obstacles.filter(o=>o.t<0.25).map(o=>o.lane));
+    // Escolher faixa livre; se ambas ocupadas, não spawna agora
+    const freeLanes = [0,1].filter(l=>!busyLanes.has(l));
+    if(freeLanes.length > 0){
+      const lane = freeLanes[Math.floor(Math.random()*freeLanes.length)];
+      state.obstacles.push({
+        lane, t:0.0,
+        speed: state.obstacleSpeed*(0.82+Math.random()*0.36),
+        passed:false, row:Math.floor(Math.random()*ROWS),
+        animTimer:0, animFrame:Math.floor(Math.random()*COLS),
+      });
+    }
+  }
+
+  // Mover
+  const speedMul=1.0+state.phase*0.15;
+  for(const obs of state.obstacles) obs.t+=obs.speed*speedMul*dt;
+
+  // Colisão
+  const inv=(state.t-state.hitTime)<state.HIT_COOLDOWN;
+  if(!inv){
+    for(const obs of state.obstacles){
+      if(obs.passed||obs.t<0.70||obs.lane!==state.playerLane) continue;
+      // hitbox: player em t=0.78, obs quando t ≈ 0.74-0.84
+      if(obs.t>=0.72&&obs.t<=0.86){
+        state.lives=Math.max(0,state.lives-1);
+        state.hitTime=state.t;
+        playHitSfx();
+        obs.passed=true;
+        if(state.lives<=0){
+          state.gameOver=true;
+          const finalScore=(savedGame?.score||0)+state.bonusScore;
+          const fs={...(savedGame||{}),score:finalScore,lives:0,_returned:true};
+          localStorage.setItem('surf_bonus_return',JSON.stringify(fs));
+          stopBgMusic(); stopEngine();
+          setTimeout(()=>{ window.location.href='./return_from_surf.html'; },2200);
+          return;
+        }
+      }
+    }
+  }
+
+  // Pontuação
+  for(const obs of state.obstacles){
+    if(!obs.passed&&obs.t>0.90){
+      obs.passed=true;
+      state.bonusScore++;
+      const tn=performance.now();
+      if(tn-state.lastPointAt>80){ safePlayEl(document.getElementById('pointSfx')); state.lastPointAt=tn; }
+      // Vitória
+      if(state.bonusScore>=state.bonusGoal&&!state.bonusWon){
+        state.bonusWon=true; state.gameOver=true;
+        const finalScore=(savedGame?.score||0)+state.bonusScore;
+        const fs={...(savedGame||{}),score:finalScore,lives:savedGame?.lives||3,_returned:true,bonusSurfCompleted:true};
+        localStorage.setItem('surf_bonus_return',JSON.stringify(fs));
+        stopBgMusic(); stopEngine();
+        setTimeout(()=>{ window.location.href='./return_from_surf.html'; },2200);
+        return;
+      }
+      if(state.bonusScore>=state.nextPhaseAt){
+        state.phase=Math.min(3,state.phase+1);
+        state.nextPhaseAt+=8; state.phaseOverlay=3.5;
+        state.obstacleSpeed=Math.min(0.85,state.obstacleSpeed+0.045);
+        state.roadSpeed=Math.min(1.0,state.roadSpeed+0.055);
+        safePlayEl(document.getElementById('phaseSfx'));
+      }
+    }
+  }
+
+  state.obstacles=state.obstacles.filter(o=>o.t<=1.1);
+  if(state.phaseOverlay>0) state.phaseOverlay-=dt;
+}
+
+// ===================== LOOP =====================
+let last=performance.now();
+function loop(now){
+  try{
+    const dt=Math.min(0.032,(now-last)/1000); last=now;
+    const w=cvs.clientWidth, h=cvs.clientHeight;
+    drawBackground(w,h,state.phase);
+    drawRoad(w,h);
+    drawObstacles(w,h);
+    drawPlayer(w,h);
+    drawHUD(w,h);
+    drawPhaseOverlay(w,h);
+    if(state.gameOver) drawGameOver(w,h);
+    else update(dt);
+  }catch(e){ console.error(e); }
+  requestAnimationFrame(loop);
+}
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>

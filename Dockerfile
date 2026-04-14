@@ -43,10 +43,32 @@ RUN mkdir -p www && \
     cp -r sounds www/ && \
     cp *.png www/ 2>/dev/null || true && \
     cp bonus_surf.html www/ 2>/dev/null || true && \
+    cp bonus_car.html www/ 2>/dev/null || true && \
     cp return_from_surf.html www/ 2>/dev/null || true
 
-RUN npx cap add android && \
-    npx cap sync android
+RUN npx cap add android && npx cap sync android
+
+# ── 4c. Instalar ImageMagick e gerar ícones Android ──────────
+RUN apt-get update && apt-get install -y imagemagick && rm -rf /var/lib/apt/lists/*
+
+RUN for dir in \
+      android/app/src/main/res/mipmap-mdpi \
+      android/app/src/main/res/mipmap-hdpi \
+      android/app/src/main/res/mipmap-xhdpi \
+      android/app/src/main/res/mipmap-xxhdpi \
+      android/app/src/main/res/mipmap-xxxhdpi; do \
+      mkdir -p $dir; \
+    done && \
+    convert assets/icon.png -resize 48x48   android/app/src/main/res/mipmap-mdpi/ic_launcher.png && \
+    convert assets/icon.png -resize 72x72   android/app/src/main/res/mipmap-hdpi/ic_launcher.png && \
+    convert assets/icon.png -resize 96x96   android/app/src/main/res/mipmap-xhdpi/ic_launcher.png && \
+    convert assets/icon.png -resize 144x144 android/app/src/main/res/mipmap-xxhdpi/ic_launcher.png && \
+    convert assets/icon.png -resize 192x192 android/app/src/main/res/mipmap-xxxhdpi/ic_launcher.png && \
+    convert assets/icon.png -resize 48x48   android/app/src/main/res/mipmap-mdpi/ic_launcher_round.png && \
+    convert assets/icon.png -resize 72x72   android/app/src/main/res/mipmap-hdpi/ic_launcher_round.png && \
+    convert assets/icon.png -resize 96x96   android/app/src/main/res/mipmap-xhdpi/ic_launcher_round.png && \
+    convert assets/icon.png -resize 144x144 android/app/src/main/res/mipmap-xxhdpi/ic_launcher_round.png && \
+    convert assets/icon.png -resize 192x192 android/app/src/main/res/mipmap-xxxhdpi/ic_launcher_round.png
 
 # ── 5. Build do APK debug ────────────────────────────────────
 RUN cd android && chmod +x gradlew && ./gradlew assembleDebug --no-daemon
