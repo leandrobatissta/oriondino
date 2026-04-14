@@ -71,8 +71,10 @@ RUN for dir in \
     convert assets/icon.png -resize 192x192 android/app/src/main/res/mipmap-xxxhdpi/ic_launcher_round.png
 
 # ── 5. Build do APK debug ────────────────────────────────────
-RUN cd android && chmod +x gradlew && ./gradlew assembleDebug --no-daemon
+RUN cd android && chmod +x gradlew && ./gradlew assembleDebug --no-daemon && \
+    mv /app/android/app/build/outputs/apk/debug/app-debug.apk \
+       /app/android/app/build/outputs/apk/debug/app-oriondino.apk
 
 # ── 6. Copiar APK para /output (montado via volume) ──────────
 CMD cp -r /app/android/app/build/outputs /output && \
-    echo "✅ APK gerado em /output/apk/debug/app-debug.apk"
+    echo "✅ APK gerado em /output/apk/debug/app-oriondino.apk"

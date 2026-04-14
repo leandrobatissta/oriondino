@@ -9,7 +9,7 @@ PATH_REMOTE = $(PATH_DEV)/oriondino
 
 # Local onde o APK será salvo após pull
 APK_DIR     = apk
-APK_FILE    = app-debug.apk
+APK_FILE    = app-oriondino.apk
 
 # Git
 GIT_REMOTE  = origin
