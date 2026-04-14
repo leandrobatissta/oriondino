@@ -88,6 +88,42 @@ Regras:
 - `sprite2.png`: sprites da Yamin
 - `assets/`: imagens/sons auxiliares
 
+## Build APK Android
+
+### Opção 1: GitHub Actions (recomendado)
+
+Ao fazer `push` para `main`/`master`, o workflow `.github/workflows/build-apk.yml` gera o APK automaticamente.
+
+1. Vá em **Actions** no seu repositório GitHub
+2. Aguarde o job terminar
+3. Baixe o artefato **app-debug-apk** na seção *Artifacts*
+
+### Opção 2: Docker local
+
+```bash
+# Build da imagem (primeira vez demora ~10 min — baixa SDK Android)
+docker build -t oriondino-apk .
+
+# Gerar APK (fica na pasta ./output/)
+mkdir -p output
+docker run --rm -v "$PWD/output:/output" oriondino-apk
+```
+
+O APK estará em `output/apk/debug/app-debug.apk`.
+
+### Opção 3: Máquina local (Node + Android Studio)
+
+```bash
+npm install
+npx cap add android
+npx cap sync android
+cd android && ./gradlew assembleDebug
+```
+
+APK em `android/app/build/outputs/apk/debug/app-debug.apk`.
+
+> **Instalar no Android:** copie o APK para o celular e abra. Pode ser necessário habilitar *"Instalar de fontes desconhecidas"* nas configurações.
+
 ## Créditos
 
 Projeto criado e iterado junto com melhorias de UI/UX, áudio e gameplay.
