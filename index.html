@@ -1097,15 +1097,16 @@
     const cards = Object.entries(CHARACTERS);
     const cols = w >= 860 ? 4 : (w >= 520 ? 3 : 2);
     const rows = Math.ceil(cards.length / cols);
-    const gapX = Math.round(w*0.03);
-    const gapY = Math.round(h*0.022);
+    const gapX = Math.round(w*0.025);
+    const gapY = Math.round(h*0.018);
     const startY = Math.round(h * 0.22); // sincronizado com pickCharacterAt
     const availW = w - gapX*(cols+1);
     // bottomLimit: acima do record (que fica acima dos botões de tema)
     const bottomLimit = themeBtnY - Math.round(h * 0.09);
     const availH = Math.max(0, bottomLimit - startY);
     const cardW = Math.floor(availW / cols);
-    const cardH = Math.floor(Math.min(cardW*0.82, (availH - gapY*(rows-1)) / rows));
+    const cardH = Math.floor(Math.min(cardW*1.15, (availH - gapY*(rows-1)) / rows));
+    const isMobileLayout = w < 520;
 
     const t = now || performance.now();
     const previewFrame = runFrameAt(t);
@@ -1126,56 +1127,105 @@
         const pr = frameRectFor(id, previewFrame);
         const s = SHEETS[pr.sheetId];
         if(s?.spr?.ready && s?.img?.complete){
-          const pw = Math.round(cardW*0.38);
-          const ph = Math.round(pw*(s.spr.h/s.spr.w));
-          const px = cx + Math.round(cardW*0.10);
-          const py = cy + Math.round(cardH*0.18);
-          ctx.save();
-          ctx.imageSmoothingEnabled = false;
-          ctx.drawImage(s.img, pr.sx, pr.sy, pr.sw, pr.sh, px, py, pw, ph);
-          ctx.restore();
+          if(isMobileLayout){
+            // Layout vertical: sprite centrado no topo ocupando ~65% da altura
+            const sprAreaH = Math.round(cardH * 0.62);
+            const pw = Math.min(Math.round(cardW * 0.72), Math.round(sprAreaH * (s.spr.w/s.spr.h)));
+            const ph = Math.round(pw * (s.spr.h/s.spr.w));
+            const px = cx + Math.round((cardW - pw) / 2);
+            const py = cy + Math.round(cardH * 0.04);
+            ctx.save();
+            ctx.imageSmoothingEnabled = false;
+            ctx.drawImage(s.img, pr.sx, pr.sy, pr.sw, pr.sh, px, py, pw, ph);
+            ctx.restore();
+          } else {
+            // Layout horizontal: sprite à esquerda
+            const pw = Math.round(cardW*0.38);
+            const ph = Math.round(pw*(s.spr.h/s.spr.w));
+            const px = cx + Math.round(cardW*0.08);
+            const py = cy + Math.round((cardH - ph) / 2);
+            ctx.save();
+            ctx.imageSmoothingEnabled = false;
+            ctx.drawImage(s.img, pr.sx, pr.sy, pr.sw, pr.sh, px, py, pw, ph);
+            ctx.restore();
+          }
         }
       }
 
-      ctx.fillStyle='#fff';
-      ctx.textAlign='left';
-      const nameX = cx + Math.round(cardW*0.52);
-      const nameY = cy + Math.round(cardH*0.40);
-      const maxW = cx + cardW - nameX - Math.round(cardW*0.04);
-
-      let nameSize = Math.round(cardH*0.105);
-      let nm = ch.name;
-      ctx.font = `bold ${nameSize}px system-ui`;
-      while(nameSize > 11 && ctx.measureText(nm).width > maxW){
-        nameSize = Math.round(nameSize*0.92);
+      if(isMobileLayout){
+        // Texto centralizado embaixo do sprite
+        const textY = cy + Math.round(cardH * 0.70);
+        const maxTW = cardW - 6;
+        ctx.textAlign = 'center';
+        let nm = ch.name;
+        let nameSize = Math.round(cardH * 0.11);
         ctx.font = `bold ${nameSize}px system-ui`;
-      }
-      while(nm.length > 0 && ctx.measureText(nm).width > maxW) nm = nm.slice(0, -1);
-      if(nm !== ch.name) nm = nm.slice(0, Math.max(0, nm.length-1)) + '…';
-      ctx.fillText(nm, nameX, nameY);
+        while(nameSize > 9 && ctx.measureText(nm).width > maxTW){
+          nameSize = Math.round(nameSize * 0.88);
+          ctx.font = `bold ${nameSize}px system-ui`;
+        }
+        // quebra em duas linhas se ainda não cabe
+        const parts = nm.split(' ');
+        if(parts.length > 1 && ctx.measureText(nm).width > maxTW){
+          const mid = Math.ceil(parts.length/2);
+          const line1 = parts.slice(0,mid).join(' ');
+          const line2 = parts.slice(mid).join(' ');
+          ctx.fillStyle = '#fff';
+          ctx.fillText(line1, cx + cardW/2, textY);
+          ctx.fillText(line2, cx + cardW/2, textY + Math.round(nameSize*1.1));
+        } else {
+          ctx.fillStyle = '#fff';
+          ctx.fillText(nm, cx + cardW/2, textY);
+        }
+        const best = Number(bestByCharacter[id] || 0);
+        if(best > 0){
+          ctx.fillStyle = 'rgba(255,255,255,0.75)';
+          let bestSize = Math.round(cardH * 0.08);
+          ctx.font = `${bestSize}px system-ui`;
+          ctx.fillText(`${best}`, cx + cardW/2, cy + Math.round(cardH*0.92));
+        }
+      } else {
+        // Layout horizontal: texto à direita
+        ctx.fillStyle='#fff';
+        ctx.textAlign='left';
+        const nameX = cx + Math.round(cardW*0.50);
+        const nameY = cy + Math.round(cardH*0.38);
+        const maxW = cx + cardW - nameX - Math.round(cardW*0.04);
 
-      ctx.fillStyle='rgba(255,255,255,0.8)';
-      let hint = 'Toque p/ escolher';
-      let hintSize = Math.round(cardH*0.08);
-      ctx.font = `${hintSize}px system-ui`;
-      while(hintSize > 10 && ctx.measureText(hint).width > maxW){
-        hintSize = Math.round(hintSize*0.92);
+        let nameSize = Math.round(cardH*0.105);
+        let nm = ch.name;
+        ctx.font = `bold ${nameSize}px system-ui`;
+        while(nameSize > 11 && ctx.measureText(nm).width > maxW){
+          nameSize = Math.round(nameSize*0.92);
+          ctx.font = `bold ${nameSize}px system-ui`;
+        }
+        while(nm.length > 0 && ctx.measureText(nm).width > maxW) nm = nm.slice(0, -1);
+        if(nm !== ch.name) nm = nm.slice(0, Math.max(0, nm.length-1)) + '…';
+        ctx.fillText(nm, nameX, nameY);
+
+        ctx.fillStyle='rgba(255,255,255,0.8)';
+        let hint = 'Toque p/ escolher';
+        let hintSize = Math.round(cardH*0.08);
         ctx.font = `${hintSize}px system-ui`;
-      }
-      if(ctx.measureText(hint).width > maxW) hint = 'Toque';
-      ctx.fillText(hint, nameX, cy + Math.round(cardH*0.58));
+        while(hintSize > 10 && ctx.measureText(hint).width > maxW){
+          hintSize = Math.round(hintSize*0.92);
+          ctx.font = `${hintSize}px system-ui`;
+        }
+        if(ctx.measureText(hint).width > maxW) hint = 'Toque';
+        ctx.fillText(hint, nameX, cy + Math.round(cardH*0.58));
 
-      const best = Number(bestByCharacter[id] || 0);
-      ctx.fillStyle='rgba(255,255,255,0.90)';
-      let bestLine = `Melhor: ${best}`;
-      let bestSize = Math.round(cardH*0.078);
-      ctx.font = `${bestSize}px system-ui`;
-      while(bestSize > 10 && ctx.measureText(bestLine).width > maxW){
-        bestSize = Math.round(bestSize*0.92);
+        const best = Number(bestByCharacter[id] || 0);
+        ctx.fillStyle='rgba(255,255,255,0.90)';
+        let bestLine = `Melhor: ${best}`;
+        let bestSize = Math.round(cardH*0.078);
         ctx.font = `${bestSize}px system-ui`;
+        while(bestSize > 10 && ctx.measureText(bestLine).width > maxW){
+          bestSize = Math.round(bestSize*0.92);
+          ctx.font = `${bestSize}px system-ui`;
+        }
+        if(ctx.measureText(bestLine).width > maxW) bestLine = `${best}`;
+        ctx.fillText(bestLine, nameX, cy + Math.round(cardH*0.76));
       }
-      if(ctx.measureText(bestLine).width > maxW) bestLine = `${best}`;
-      ctx.fillText(bestLine, nameX, cy + Math.round(cardH*0.76));
     }
 
     // Record abaixo do grid, acima dos botões de tema
