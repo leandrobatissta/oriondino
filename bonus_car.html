@@ -192,7 +192,7 @@ const LANES = 2;
 const state = {
   t:0, score: 0,
   bonusScore:0, bonusGoal:15,
-  lives: savedGame?.lives||3, maxLives: savedGame?.maxLives||3,
+  lives: savedGame?.livesOnEntry ?? savedGame?.lives ?? 3, maxLives: savedGame?.maxLives||3,
   phase:0, nextPhaseAt:8,
   gameOver:false, bonusWon:false, phaseOverlay:0, lastPointAt:0,
   playerLane:1, targetLane:1, prevLane:1,
@@ -389,7 +389,7 @@ function drawObstacles(w,h){
 }
 
 function drawHUD(w,h){
-  const pad=Math.round(h*0.022), sz=Math.round(h*0.042);
+  const pad=Math.round(h*0.022), sz=Math.min(Math.round(h*0.042), Math.round(w*0.072));
   ctx.save();
   ctx.fillStyle='rgba(0,0,0,0.5)'; ctx.fillRect(0,0,w,sz+pad*2+4);
   ctx.fillStyle='#fff'; ctx.font=`bold ${sz}px system-ui`;
@@ -495,7 +495,7 @@ function update(dt){
         if(state.lives<=0){
           state.gameOver=true;
           const finalScore=(savedGame?.score||0)+state.bonusScore;
-          const fs={...(savedGame||{}),score:finalScore,lives:0,_returned:true};
+          const fs={...(savedGame||{}),score:finalScore,lives:savedGame?.livesOnEntry ?? savedGame?.lives ?? 1,_returned:true};
           localStorage.setItem('surf_bonus_return',JSON.stringify(fs));
           stopBgMusic(); stopEngine();
           setTimeout(()=>{ window.location.href='./return_from_surf.html'; },2200);
@@ -516,7 +516,7 @@ function update(dt){
       if(state.bonusScore>=state.bonusGoal&&!state.bonusWon){
         state.bonusWon=true; state.gameOver=true;
         const finalScore=(savedGame?.score||0)+state.bonusScore;
-        const fs={...(savedGame||{}),score:finalScore,lives:savedGame?.lives||3,_returned:true,bonusSurfCompleted:true};
+        const fs={...(savedGame||{}),score:finalScore,lives:savedGame?.livesOnEntry ?? savedGame?.lives ?? 3,_returned:true,bonusSurfCompleted:true};
         localStorage.setItem('surf_bonus_return',JSON.stringify(fs));
         stopBgMusic(); stopEngine();
         setTimeout(()=>{ window.location.href='./return_from_surf.html'; },2200);

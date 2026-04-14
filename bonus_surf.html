@@ -6,16 +6,10 @@
 <title>Orion & Yasminn — Bônus Surf</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box;}
-body{background:#000;overflow:hidden;font-family:system-ui;}
-.wrap{display:grid;place-items:center;height:100%;gap:12px;padding:12px}
-.stack{position:relative;width:100%;max-width:900px}
-#game{width:100%;aspect-ratio:2/3;max-height:92vh;background:#000;border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,.35);display:block;touch-action:manipulation}
-canvas{
-  display:block;
-  image-rendering:pixelated;
-  image-rendering:-moz-crisp-edges;
-  image-rendering:crisp-edges;
-}
+body{background:#000;overflow:hidden;font-family:system-ui;height:100vh;}
+.wrap{display:grid;place-items:center;height:100vh;gap:0;padding:0}
+.stack{position:relative;width:100%;max-width:520px;height:100vh;}
+#game{width:100%;height:100%;background:#000;display:block;touch-action:manipulation;image-rendering:pixelated;image-rendering:-moz-crisp-edges;image-rendering:crisp-edges;}
 </style>
 </head>
 <body>
@@ -544,7 +538,7 @@ function update(dt){
           const finalState = {
             ...state.savedGame,
             score: (state.savedGame?.score||0) + state.bonusScore,
-            lives: 0,
+            lives: state.savedGame?.livesOnEntry ?? state.savedGame?.lives ?? 1,
             _returned: true,
             bonusSurfCompleted: false
           };
@@ -582,7 +576,7 @@ function update(dt){
         const finalState = {
           ...state.savedGame,
           score: (state.savedGame?.score||0) + state.bonusScore,
-          lives: state.savedGame?.lives || state.lives,
+          lives: state.savedGame?.livesOnEntry ?? state.savedGame?.lives ?? state.lives,
           _returned: true,
           bonusSurfCompleted: true
         };

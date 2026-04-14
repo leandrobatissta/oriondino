@@ -89,7 +89,12 @@
     const btnW = Math.min(420, Math.max(220, w - sidePad*2));
     const btnH = Math.max(44, Math.min(74, Math.round(h*0.085)));
     const bx = Math.round((w-btnW)/2);
-    const by = Math.round(Math.min(h - btnH - 10, h*0.925 - btnH/2));
+    const isMobile = w < 600;
+    // Em mobile: sobe para deixar espaço para botões surf/car abaixo
+    const bonusBtnH = isMobile ? Math.round(btnH * 0.85) : 0;
+    const bonusGap  = isMobile ? Math.round(h * 0.012) : 0;
+    const bottomMargin = isMobile ? bonusBtnH + bonusGap + Math.round(h*0.012) : 10;
+    const by = Math.round(Math.min(h - btnH - bottomMargin, h*0.925 - btnH/2 - bottomMargin/2));
     return {x:bx, y:by, w:btnW, h:btnH};
   }
 
@@ -1251,15 +1256,29 @@
     ctx.textBaseline='middle';
     ctx.fillText('COMEÇAR A AVENTURA', w/2, br.y + br.h*0.52);
 
-    // Botões bônus: Surf (esq, 60pts) e Car (dir, 100pts)
+    // Botões bônus: Surf e Car
     const surfUnlocked = bestCharacterScore >= 60;
     const carUnlocked  = bestCharacterScore >= 100;
-    const bbW = Math.round(br.h * 1.6);
-    const bbH = br.h;
-    const bbGap = Math.round(w * 0.016);
-    const bbSurfX = br.x - bbW - bbGap;
-    const bbCarX  = br.x + br.w + bbGap;
-    const bbY = br.y;
+    const isMobileBtns = w < 600;
+
+    let bbSurfX, bbCarX, bbY, bbW, bbH;
+    if(isMobileBtns){
+      // Mobile: dois botões abaixo do COMEÇAR, lado a lado, mesma largura
+      const gap = Math.round(w * 0.03);
+      bbW = Math.round((br.w - gap) / 2);
+      bbH = Math.round(br.h * 0.85);
+      bbSurfX = br.x;
+      bbCarX  = br.x + bbW + gap;
+      bbY = br.y + br.h + Math.round(h * 0.012);
+    } else {
+      // Desktop: à esquerda e direita do COMEÇAR
+      bbW = Math.round(br.h * 1.6);
+      bbH = br.h;
+      const bbGap = Math.round(w * 0.016);
+      bbSurfX = br.x - bbW - bbGap;
+      bbCarX  = br.x + br.w + bbGap;
+      bbY = br.y;
+    }
 
     // --- Surf ---
     ctx.globalAlpha = surfUnlocked ? 1.0 : 0.38;
@@ -1461,9 +1480,6 @@
     state.mode = 'play';
   }
 
-  // Controla qual bônus aparece na vez (alterna surf/car)
-  let _lastBonusShown = 'car'; // próxima vez aparece surf
-
   function openUpgrade(){
     const allOpts = [
       { id:'invuln', title:'Invencível', desc:'Sem dano por 5 segundos', disabled: state.power.cdInvuln > 0 },
@@ -1474,22 +1490,16 @@
       { id:'car', title:'Bônus Corrida!', desc:'Fase bônus no asfalto!', disabled: state.power.cdCar > 0 }
     ];
     const includeLife = Math.random() < 0.25;
-    // Alterna: se o último mostrado foi surf, agora mostra car, e vice-versa
-    const nextBonus = _lastBonusShown === 'surf' ? 'car' : 'surf';
-    const includeBonus = Math.random() < 0.35; // 35% de chance de incluir bônus
-    let filtered = allOpts;
+    const includeSurf = Math.random() < 0.35;
+    const includeCar  = Math.random() < 0.35;
+    // Começa sem bônus, adiciona surf e car com igual probabilidade
+    let filtered = allOpts.filter(o => o.id !== 'surf' && o.id !== 'car');
     if(!includeLife) filtered = filtered.filter(o => o.id !== 'life');
-    // Remove AMBOS surf e car, depois reinsere apenas o que toca
-    filtered = filtered.filter(o => o.id !== 'surf' && o.id !== 'car');
-    if(includeBonus){
-      const bonusOpt = allOpts.find(o => o.id === nextBonus);
-      if(bonusOpt) filtered.push(bonusOpt);
-    }
+    if(includeSurf) filtered.push(allOpts.find(o => o.id === 'surf'));
+    if(includeCar)  filtered.push(allOpts.find(o => o.id === 'car'));
     const shuffled = filtered.sort(() => Math.random() - 0.5);
-    const opts = shuffled.slice(0, 3);
-    state.upgradeOptions = opts;
+    state.upgradeOptions = shuffled.slice(0, 3);
     state.mode = 'upgrade';
-    if(includeBonus) _lastBonusShown = nextBonus;
   }
 
   function wrapTextCentered(text, x, y, maxWidth, lineHeight, font){
@@ -1615,19 +1625,32 @@
         const y = p.y;
         const w = cvs.clientWidth;
         const h = cvs.clientHeight;
-        // 1. Verificar botão COMEÇAR e bônus ao lado
+        // 1. Verificar botão COMEÇAR e bônus (mesma lógica do drawCharacterSelect)
         const br = getStartButtonRect();
-        const bbW2 = Math.round(br.h * 1.6);
-        const bbGap2 = Math.round(w * 0.016);
-        const bbSurfX2 = br.x - bbW2 - bbGap2;
-        const bbCarX2  = br.x + br.w + bbGap2;
-        if(bestCharacterScore >= 60 && x>=bbSurfX2 && x<=bbSurfX2+bbW2 && y>=br.y && y<=br.y+br.h){
+        const isMobileBtns2 = w < 600;
+        let bbSurfX2, bbCarX2, bbY2, bbW2, bbH2;
+        if(isMobileBtns2){
+          const gap2 = Math.round(w * 0.03);
+          bbW2 = Math.round((br.w - gap2) / 2);
+          bbH2 = Math.round(br.h * 0.85);
+          bbSurfX2 = br.x;
+          bbCarX2  = br.x + bbW2 + gap2;
+          bbY2 = br.y + br.h + Math.round(h * 0.012);
+        } else {
+          bbW2 = Math.round(br.h * 1.6);
+          bbH2 = br.h;
+          const bbGap2 = Math.round(w * 0.016);
+          bbSurfX2 = br.x - bbW2 - bbGap2;
+          bbCarX2  = br.x + br.w + bbGap2;
+          bbY2 = br.y;
+        }
+        if(bestCharacterScore >= 60 && x>=bbSurfX2 && x<=bbSurfX2+bbW2 && y>=bbY2 && y<=bbY2+bbH2){
           const bs={score:0,livesOnEntry:state.maxLives,lives:state.maxLives,phase:0,character:currentCharacter,
             weather:state.weather,worldSpeed:world.speed,upgradeAt:10,nextPhaseAt:10};
           localStorage.setItem('surf_bonus_return',JSON.stringify(bs));
           window.location.href='./bonus_surf.html'; return;
         }
-        if(bestCharacterScore >= 100 && x>=bbCarX2 && x<=bbCarX2+bbW2 && y>=br.y && y<=br.y+br.h){
+        if(bestCharacterScore >= 100 && x>=bbCarX2 && x<=bbCarX2+bbW2 && y>=bbY2 && y<=bbY2+bbH2){
           const bs={score:0,livesOnEntry:state.maxLives,lives:state.maxLives,phase:0,character:currentCharacter,
             weather:state.weather,worldSpeed:world.speed,upgradeAt:10,nextPhaseAt:10};
           localStorage.setItem('surf_bonus_return',JSON.stringify(bs));
